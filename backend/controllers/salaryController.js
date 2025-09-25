@@ -108,6 +108,9 @@ const calculateSalary = async (req, res) => {
     // Get employee's basic salary
     const basicSalary = employee.basicSalary || 100000; // Use basicSalary from employee model
 
+    // Calculate no-pay deduction (1000 per no-pay day)
+    const noPayDeduction = noPayLeaveDays * 1000;
+
     // Auto-calculated values
     const calculatedData = {
       employeeInfo: {
@@ -143,7 +146,7 @@ const calculateSalary = async (req, res) => {
       deductions: {
         salaryAdvance: 0, // HR will input
         apit: 0, // Will be calculated based on salary
-        noPayDaysDeduction: 0 // Will be calculated in pre-save
+        noPayDaysDeduction: noPayDeduction // Fixed at 1000 per no-pay day
       },
       // EPF Information
       epfInfo: {
