@@ -259,18 +259,12 @@ const MyProfile = () => {
               <div className="group">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">First Name</label>
                 {isEditing ? (
-                 <input
-                  type="text"
-                  value={profileData.firstName}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow only letters (A–Z, a–z). Add \s if you also want spaces.
-                    if (/^[A-Za-z]*$/.test(value)) {
-                      setProfileData({ ...profileData, firstName: value });
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                />
+                  <input
+                    type="text"
+                    value={profileData.firstName}
+                    onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
                 ) : (
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <p className="text-gray-900 font-medium">{profileData.firstName}</p>
@@ -285,13 +279,7 @@ const MyProfile = () => {
                   <input
                     type="text"
                     value={profileData.lastName}
-                    onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow only letters (A–Z, a–z). Add \s if you also want spaces.
-                    if (/^[A-Za-z]*$/.test(value)) {
-                      setProfileData({ ...profileData, lastName: value });
-                    }
-                  }}
+                    onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   />
                 ) : (
@@ -307,18 +295,12 @@ const MyProfile = () => {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                   <input
-                    type="email"
-                    value={profileData.email}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // Allow only letters, numbers, dot, underscore, and @
-                      if (/^[A-Za-z0-9@._]*$/.test(value)) {
-                        setProfileData({ ...profileData, email: value });
-                      }
-                    }}
-                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  />
+                    <input
+                      type="email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    />
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{profileData.email}</p>
@@ -336,13 +318,7 @@ const MyProfile = () => {
                     <input
                       type="text"
                       value={profileData.phone}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Allow only digits and restrict to max 10
-                        if (/^\d{0,10}$/.test(value)) {
-                          setProfileData({ ...profileData, phone: value });
-                        }
-                      }}
+                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
                       className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     />
                   ) : (

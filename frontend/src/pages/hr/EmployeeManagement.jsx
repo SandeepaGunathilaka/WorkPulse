@@ -596,7 +596,7 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
   useEffect(() => {
     if (employee && isOpen) {
       setFormData({
-        basicSalary: employee.basicSalary || '',
+        basicSalary: employee.basicSalary ? formatNumberWithCommas(employee.basicSalary.toString()) : '',
         epfNo: employee.epfNo || '',
         epfJoiningDate: employee.epfJoiningDate ? new Date(employee.epfJoiningDate).toISOString().split('T')[0] : '',
         bankName: employee.bankDetails?.bankName || '',
@@ -609,6 +609,29 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
     }
   }, [employee, isOpen]);
 
+  // Format number with commas for thousands
+  const formatNumberWithCommas = (value) => {
+    // Remove all non-digit characters except decimal point
+    const numValue = value.replace(/[^\d.]/g, '');
+    
+    // Split into integer and decimal parts
+    const parts = numValue.split('.');
+    let integerPart = parts[0];
+    const decimalPart = parts.length > 1 ? `.${parts[1]}` : '';
+    
+    // Add commas to integer part
+    if (integerPart) {
+      integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    
+    return integerPart + decimalPart;
+  };
+
+  // Remove commas and convert to plain number for processing
+  const removeCommasFromNumber = (value) => {
+    return value.replace(/,/g, '');
+  };
+
   // Get today's date in YYYY-MM-DD format for max date restriction
   const getTodayDate = () => {
     return new Date().toISOString().split('T')[0];
@@ -617,7 +640,7 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
   // Validation functions
   const validateBasicSalary = (value) => {
     if (value === '') return true;
-    const numValue = parseFloat(value);
+    const numValue = parseFloat(removeCommasFromNumber(value));
     return !isNaN(numValue) && numValue >= 0;
   };
 
@@ -670,7 +693,7 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
     setLoading(true);
     try {
       const updateData = {
-        basicSalary: parseFloat(formData.basicSalary) || 0,
+        basicSalary: parseFloat(removeCommasFromNumber(formData.basicSalary)) || 0,
         epfNo: formData.epfNo,
         epfJoiningDate: formData.epfJoiningDate || null,
         bankDetails: {
@@ -704,10 +727,17 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
 
     switch (name) {
       case 'basicSalary':
-        isValid = validateBasicSalary(value);
+        // Format with commas as user types
+        processedValue = formatNumberWithCommas(value);
+        
+        // Validate the numeric value (without commas)
+        isValid = validateBasicSalary(processedValue);
         if (isValid && value !== '') {
-          // Limit to 10 characters total
-          processedValue = value.slice(0, 10);
+          // Limit to 10 digits (excluding commas)
+          const numValue = removeCommasFromNumber(processedValue);
+          if (numValue.length > 10) {
+            processedValue = formatNumberWithCommas(numValue.slice(0, 10));
+          }
         }
         break;
         
@@ -811,18 +841,15 @@ const SalaryManagementModal = ({ isOpen, onClose, employee, onSuccess }) => {
                     Basic Salary (LKR) *
                   </label>
                   <input
-                    type="number"
+                    type="text" // Changed from "number" to "text" to allow comma formatting
                     name="basicSalary"
                     value={formData.basicSalary}
                     onChange={handleChange}
-                    min="0"
-                    max="9999999"
-                    maxLength="10"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter basic salary"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Maximum 10 digits</p>
+                  <p className="text-xs text-gray-500 mt-1">Maximum 10 digits (commas added automatically)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
