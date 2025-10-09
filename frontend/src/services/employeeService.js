@@ -95,6 +95,26 @@ const employeeService = {
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update salary details');
     }
+  },
+
+  // Activate employee (Admin only)
+  activateEmployee: async (employeeId) => {
+    try {
+      const response = await api.put(`/admin/users/${employeeId}/activate`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to activate employee');
+    }
+  },
+
+  // Deactivate employee (Admin only)
+  deactivateEmployee: async (employeeId) => {
+    try {
+      const response = await api.put(`/admin/users/${employeeId}/deactivate`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to deactivate employee');
+    }
   }
 };
 

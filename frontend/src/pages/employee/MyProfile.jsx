@@ -23,6 +23,126 @@ const MyProfile = () => {
     emergencyContact: '',
   });
   const [originalData, setOriginalData] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Date range helper functions
+  const getMinBirthDate = () => {
+    const today = new Date();
+    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+    return maxDate.toISOString().split('T')[0];
+  };
+
+  const getMaxBirthDate = () => {
+    const today = new Date();
+    const minDate = new Date(today.getFullYear() - 35, today.getMonth(), today.getDate());
+    return minDate.toISOString().split('T')[0];
+  };
+
+  // Validation helper functions
+  const validateForm = () => {
+    const newErrors = {};
+    
+    // Name validation - only letters and spaces
+    const nameRegex = /^[a-zA-Z\s]+$/;
+    if (!profileData.firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    } else if (!nameRegex.test(profileData.firstName)) {
+      newErrors.firstName = 'First name can only contain letters and spaces';
+    }
+    
+    if (!profileData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    } else if (!nameRegex.test(profileData.lastName)) {
+      newErrors.lastName = 'Last name can only contain letters and spaces';
+    }
+    
+    // Email validation
+    const emailRegex = /^[a-zA-Z0-9@._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!profileData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!emailRegex.test(profileData.email)) {
+      newErrors.email = 'Email must contain only letters, numbers, @ symbol, dots, and hyphens';
+    }
+    
+    // Phone validation - exactly 10 digits
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!profileData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!phoneRegex.test(profileData.phone)) {
+      newErrors.phone = 'Phone number must be exactly 10 digits';
+    }
+    
+    // Date of birth validation - 18 to 35 years old
+    if (!profileData.dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    } else {
+      const birthDate = new Date(profileData.dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      if (age < 18 || age > 35) {
+        newErrors.dateOfBirth = 'Age must be between 18 and 35 years';
+      }
+    }
+    
+    // Address validation
+    if (!profileData.address.trim()) {
+      newErrors.address = 'Address is required';
+    }
+    
+    // Emergency contact validation
+    if (!profileData.emergencyContact.trim()) {
+      newErrors.emergencyContact = 'Emergency contact is required';
+    }
+    
+    setValidationErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Input filtering functions
+  const filterNameInput = (value) => {
+    return value.replace(/[^a-zA-Z\s]/g, '');
+  };
+
+  const filterEmailInput = (value) => {
+    return value.replace(/[^a-zA-Z0-9@._-]/g, '');
+  };
+
+  const filterPhoneInput = (value) => {
+    return value.replace(/[^0-9]/g, '').slice(0, 10);
+  };
+
+  // Handle input changes with filtering
+  const handleInputChange = (field, value) => {
+    let filteredValue = value;
+    
+    if (field === 'firstName' || field === 'lastName') {
+      filteredValue = filterNameInput(value);
+    } else if (field === 'email') {
+      filteredValue = filterEmailInput(value);
+    } else if (field === 'phone') {
+      filteredValue = filterPhoneInput(value);
+    } else if (field === 'dateOfBirth') {
+      // Additional validation for date of birth
+      if (value) {
+        const selectedDate = new Date(value);
+        const minDate = new Date(getMaxBirthDate());
+        const maxDate = new Date(getMinBirthDate());
+        
+        if (selectedDate < minDate || selectedDate > maxDate) {
+          // Don't update if date is outside valid range
+          return;
+        }
+      }
+    }
+    
+    setProfileData({ ...profileData, [field]: filteredValue });
+    
+    // Clear validation error for this field
+    if (validationErrors[field]) {
+      setValidationErrors({ ...validationErrors, [field]: '' });
+    }
+  };
 
   // Fetch profile data on component mount
   useEffect(() => {
@@ -51,6 +171,14 @@ const MyProfile = () => {
 
   const handleSave = async () => {
     setSaving(true);
+    
+    // Validate form before saving
+    if (!validateForm()) {
+      setSaving(false);
+      showError('Please fix the validation errors before saving');
+      return;
+    }
+    
     try {
       const submissionData = formatProfileForSubmission(profileData);
       const result = await updateProfile(submissionData);
@@ -59,6 +187,7 @@ const MyProfile = () => {
         showSuccess('Profile updated successfully!');
         setIsEditing(false);
         setOriginalData(profileData);
+        setValidationErrors({}); // Clear validation errors on success
       } else {
         showError(result.message || 'Failed to update profile');
       }
@@ -73,6 +202,7 @@ const MyProfile = () => {
   const handleCancel = () => {
     setProfileData(originalData);
     setIsEditing(false);
+    setValidationErrors({}); // Clear validation errors on cancel
   };
 
   const handleProfilePictureUpload = (uploadData) => {
@@ -259,12 +389,20 @@ const MyProfile = () => {
               <div className="group">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">First Name</label>
                 {isEditing ? (
-                  <input
-                    type="text"
-                    value={profileData.firstName}
-                    onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  />
+                  <div>
+                    <input
+                      type="text"
+                      value={profileData.firstName}
+                      onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                        validationErrors.firstName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                      }`}
+                    />
+                    {validationErrors.firstName && (
+                      <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
+                  </div>
                 ) : (
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <p className="text-gray-900 font-medium">{profileData.firstName}</p>
@@ -276,12 +414,20 @@ const MyProfile = () => {
               <div className="group">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">Last Name</label>
                 {isEditing ? (
-                  <input
-                    type="text"
-                    value={profileData.lastName}
-                    onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  />
+                  <div>
+                    <input
+                      type="text"
+                      value={profileData.lastName}
+                      onChange={(e) => handleInputChange('lastName', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                        validationErrors.lastName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                      }`}
+                    />
+                    {validationErrors.lastName && (
+                      <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
+                  </div>
                 ) : (
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <p className="text-gray-900 font-medium">{profileData.lastName}</p>
@@ -295,12 +441,20 @@ const MyProfile = () => {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                    <input
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    />
+                    <div>
+                      <input
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => handleInputChange('email', e.target.value)}
+                        className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                          validationErrors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                      {validationErrors.email && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">Letters, numbers, @ symbol, dots, and hyphens only</p>
+                    </div>
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{profileData.email}</p>
@@ -315,12 +469,20 @@ const MyProfile = () => {
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={profileData.phone}
-                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    />
+                    <div>
+                      <input
+                        type="text"
+                        value={profileData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                          validationErrors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                      {validationErrors.phone && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.phone}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">Exactly 10 digits only</p>
+                    </div>
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{profileData.phone}</p>
@@ -335,12 +497,19 @@ const MyProfile = () => {
                 <div className="relative">
                   <MapPin className="absolute left-3 top-4 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                    <textarea
-                      value={profileData.address}
-                      onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      rows="3"
-                    />
+                    <div>
+                      <textarea
+                        value={profileData.address}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                          validationErrors.address ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        rows="3"
+                      />
+                      {validationErrors.address && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
+                      )}
+                    </div>
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{profileData.address}</p>
@@ -355,12 +524,22 @@ const MyProfile = () => {
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                    <input
-                      type="date"
-                      value={profileData.dateOfBirth}
-                      onChange={(e) => setProfileData({ ...profileData, dateOfBirth: e.target.value })}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    />
+                    <div>
+                      <input
+                        type="date"
+                        value={profileData.dateOfBirth}
+                        onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                        min={getMaxBirthDate()}
+                        max={getMinBirthDate()}
+                        className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                          validationErrors.dateOfBirth ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                      {validationErrors.dateOfBirth && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.dateOfBirth}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">Must be between 18 and 35 years old</p>
+                    </div>
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{new Date(profileData.dateOfBirth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -375,12 +554,19 @@ const MyProfile = () => {
                 <div className="relative">
                   <Heart className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={profileData.emergencyContact}
-                      onChange={(e) => setProfileData({ ...profileData, emergencyContact: e.target.value })}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    />
+                    <div>
+                      <input
+                        type="text"
+                        value={profileData.emergencyContact}
+                        onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+                        className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                          validationErrors.emergencyContact ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                      {validationErrors.emergencyContact && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.emergencyContact}</p>
+                      )}
+                    </div>
                   ) : (
                     <div className="bg-gray-50 p-4 pl-12 rounded-xl border border-gray-200">
                       <p className="text-gray-900 font-medium">{profileData.emergencyContact}</p>

@@ -429,9 +429,9 @@ const LeavePoliciesPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Success Banner */}
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+        {/* <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
           ✅ <strong>SUCCESS!</strong> Leave Policies Page Connected to Backend API! 🎉
-        </div>
+        </div> */}
 
         {/* Header */}
         <div className="mb-8">
@@ -564,7 +564,7 @@ const LeavePoliciesPage = () => {
                     <div className="font-medium">
                       {policy.requiresMedicalCertificate ?
                         `After ${policy.medicalCertificateAfterDays || 1} day(s)` :
-                        'Not required'
+                        'required'
                       }
                     </div>
                   </div>

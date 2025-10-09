@@ -49,6 +49,22 @@ const AddEmployee = () => {
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState(false);
 
+  // Ensure joining date is within valid range on component mount
+  useEffect(() => {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const maxDate = today.toISOString().split('T')[0];
+    const minDate = firstDayOfMonth.toISOString().split('T')[0];
+    
+    // If current joining date is outside valid range, reset it to today
+    if (formData.joiningDate < minDate || formData.joiningDate > maxDate) {
+      setFormData(prev => ({
+        ...prev,
+        joiningDate: maxDate
+      }));
+    }
+  }, []);
+
   // Calculate max date (18 years ago from today)
   const getMaxBirthDate = () => {
     const today = new Date();
@@ -61,6 +77,20 @@ const AddEmployee = () => {
     const today = new Date();
     const minDate = new Date(today.getFullYear() - 65, today.getMonth(), today.getDate());
     return minDate.toISOString().split('T')[0];
+  };
+
+  // Calculate min date for joining date (first day of current month)
+  const getMinJoiningDate = () => {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return firstDayOfMonth.toISOString().split('T')[0];
+  };
+
+  // Calculate max date for joining date (today only - no future dates allowed)
+  const getMaxJoiningDate = () => {
+    const today = new Date();
+    // Ensure we never allow future dates, especially September 30th or any other future date
+    return today.toISOString().split('T')[0];
   };
 
   const departments = [
@@ -166,6 +196,29 @@ const AddEmployee = () => {
       }
     }
 
+    // Joining date validation
+    if (formData.joiningDate) {
+      const joiningDate = new Date(formData.joiningDate);
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
+      // Reset time to start of day for accurate comparison
+      joiningDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      firstDayOfMonth.setHours(0, 0, 0, 0);
+      
+      // Check month and year
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      const selectedMonth = joiningDate.getMonth();
+      const selectedYear = joiningDate.getFullYear();
+      
+      if (joiningDate < firstDayOfMonth || joiningDate > today || 
+          selectedMonth !== currentMonth || selectedYear !== currentYear) {
+        newErrors.joiningDate = `Joining date must be between ${firstDayOfMonth.toISOString().split('T')[0]} and ${today.toISOString().split('T')[0]} (current month only)`;
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -214,6 +267,38 @@ const AddEmployee = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    // Special validation for joining date
+    if (name === 'joiningDate') {
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const selectedDate = new Date(value);
+      
+      // Reset time to start of day for accurate comparison
+      selectedDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      firstDayOfMonth.setHours(0, 0, 0, 0);
+      
+      // Check if selected date is within valid range (current month only, up to today)
+      if (selectedDate < firstDayOfMonth || selectedDate > today) {
+        // Don't update the form data if date is outside valid range
+        console.log('Date rejected - outside current month range:', value);
+        return;
+      }
+      
+      // Additional check: Ensure it's not September 30th or any future date
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      const selectedMonth = selectedDate.getMonth();
+      const selectedYear = selectedDate.getFullYear();
+      
+      // Block any date that is not in the current month and year
+      if (selectedMonth !== currentMonth || selectedYear !== currentYear) {
+        console.log('Date rejected - not in current month/year:', value);
+        return;
+      }
+    }
+    
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setFormData(prev => ({
@@ -622,10 +707,40 @@ const AddEmployee = () => {
                     name="joiningDate"
                     value={formData.joiningDate}
                     onChange={handleChange}
+                    onBlur={(e) => {
+                      const today = new Date();
+                      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                      const selectedDate = new Date(e.target.value);
+                      
+                      // Reset time to start of day for accurate comparison
+                      selectedDate.setHours(0, 0, 0, 0);
+                      today.setHours(0, 0, 0, 0);
+                      firstDayOfMonth.setHours(0, 0, 0, 0);
+                      
+                      // Check if date is outside valid range or not in current month/year
+                      const currentMonth = today.getMonth();
+                      const currentYear = today.getFullYear();
+                      const selectedMonth = selectedDate.getMonth();
+                      const selectedYear = selectedDate.getFullYear();
+                      
+                      // If date is outside valid range or not in current month/year, reset to today
+                      if (selectedDate < firstDayOfMonth || selectedDate > today || 
+                          selectedMonth !== currentMonth || selectedYear !== currentYear) {
+                        setFormData(prev => ({
+                          ...prev,
+                          joiningDate: today.toISOString().split('T')[0]
+                        }));
+                      }
+                    }}
+                    min={getMinJoiningDate()}
+                    max={getMaxJoiningDate()}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                       errors.joiningDate ? 'border-red-500 bg-red-50' : 'border-gray-300'
                     }`}
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Can only select dates from the current month up to today (no future dates allowed)
+                  </p>
                   {errors.joiningDate && (
                     <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
                       <AlertCircle className="w-4 h-4" />

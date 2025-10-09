@@ -22,6 +22,8 @@ import {
   cancelSchedule,
 } from "../../services/scheduleService";
 import employeeService from "../../services/employeeService";
+import jsPDF from 'jspdf';
+import { useToast } from '../../contexts/ToastContext';
 
 const ShiftManagement = () => {
   const [currentView, setCurrentView] = useState("calendar"); // 'calendar' or 'list'
@@ -36,6 +38,9 @@ const ShiftManagement = () => {
   const [filterShiftType, setFilterShiftType] = useState("");
   const [filterDateRange, setFilterDateRange] = useState("monthly"); // 'monthly' or 'all'
   const [stats, setStats] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const { showToast } = useToast();
 
   // Generate calendar days
   const generateCalendarDays = () => {
@@ -276,6 +281,347 @@ const ShiftManagement = () => {
     }
   };
 
+  // PDF Export Function
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    setShowExportDropdown(false);
+    
+    try {
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      // === LIGHT COLOR PALETTE ===
+      const colors = {
+        primary: [147, 197, 253],       // Light Blue
+        primaryDark: [96, 165, 250],    // Sky Blue
+        accent: [167, 243, 208],        // Light Emerald
+        text: [75, 85, 99],             // Medium Gray
+        textLight: [107, 114, 128],     // Light Gray
+        textLighter: [156, 163, 175],   // Lighter Gray
+        border: [229, 231, 235],        // Border Gray
+        borderDark: [209, 213, 219],    // Darker Border
+        bgLight: [249, 250, 251],       // Off White
+        bgCard: [255, 255, 255],        // Pure White
+        success: [134, 239, 172],       // Light Green
+        successLight: [220, 252, 231],  // Lighter Green
+        warning: [253, 224, 71],        // Light Yellow
+        warningLight: [254, 249, 195],  // Lighter Yellow
+        danger: [252, 165, 165],        // Light Red
+        dangerLight: [254, 226, 226],   // Lighter Red
+      };
+  
+      // === LOAD LOGO ===
+      const loadImageAsDataURL = (src) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              resolve(canvas.toDataURL('image/png'));
+            } catch (e) {
+              resolve(null);
+            }
+          };
+          img.onerror = () => resolve(null);
+          img.src = src;
+        });
+      };
+
+      // Format currency
+      const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString()}`;
+
+      let yPos = 40;
+
+      // === HEADER ===
+      const logoDataUrl = await loadImageAsDataURL('/Logo.png');
+      if (logoDataUrl) {
+        const logoWidth = 130;
+        const logoHeight = 55;
+        doc.addImage(logoDataUrl, 'PNG', 30, yPos - 10, logoWidth, logoHeight);
+      }
+
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text('Colombo General Hospital', pageWidth - 30, yPos + 10, { align: 'right' });
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('123 Hospital Street, Colombo 07', pageWidth - 30, yPos + 28, { align: 'right' });
+      doc.text('Tel: +94 11 123 4567 | Email: info@cgh.lk', pageWidth - 30, yPos + 44, { align: 'right' });
+      yPos += 75;
+
+      // Accent divider
+      doc.setDrawColor(59, 130, 246);
+      doc.setFillColor(59, 130, 246);
+      doc.rect(30, yPos, pageWidth - 60, 3, 'F');
+      yPos += 25;
+
+      // === TITLE SECTION ===
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(...colors.text);
+      doc.text('Shift Schedule Report', pageWidth / 2, yPos, { align: 'center' });
+      yPos += 20;
+
+      doc.setFontSize(12);
+      doc.setTextColor(...colors.textLight);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Generated on ${new Date().toLocaleDateString()}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 30;
+  
+      // === SUMMARY STATISTICS ===
+      if (stats) {
+        console.log('📊 PDF Export - Stats data:', stats);
+        console.log('📊 PDF Export - Stats overall:', stats.overall);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(...colors.text);
+        doc.text('Summary Statistics', 40, yPos);
+        
+        doc.setFillColor(...colors.primary);
+        doc.rect(40, yPos + 6, 60, 3, 'F');
+        yPos += 35;
+
+        // Calculate stats from actual schedule data
+        const totalSchedules = schedules.length;
+        const morningShifts = schedules.filter(s => s.shift?.type === 'morning').length;
+        const afternoonShifts = schedules.filter(s => s.shift?.type === 'afternoon').length;
+        const nightShifts = schedules.filter(s => s.shift?.type === 'night').length;
+
+        console.log('📊 PDF Export - Calculated stats:', {
+          totalSchedules,
+          morningShifts,
+          afternoonShifts,
+          nightShifts
+        });
+
+        const summaryStats = [
+          { label: 'Total Schedules', value: totalSchedules, color: colors.primaryDark, bgColor: [219, 234, 254] },
+          { label: 'Morning Shifts', value: morningShifts, color: [34, 197, 94], bgColor: colors.successLight },
+          { label: 'Afternoon Shifts', value: afternoonShifts, color: [245, 158, 11], bgColor: colors.warningLight },
+          { label: 'Night Shifts', value: nightShifts, color: [147, 51, 234], bgColor: [221, 214, 254] }
+        ];
+  
+        const cardWidth = 125;
+        const cardHeight = 85;
+        const cardSpacing = 10;
+  
+        summaryStats.forEach((stat, i) => {
+          const x = 40 + i * (cardWidth + cardSpacing);
+          
+          // Card shadow
+          doc.setFillColor(0, 0, 0);
+          doc.setGState(new doc.GState({ opacity: 0.08 }));
+          doc.roundedRect(x + 2, yPos + 2, cardWidth, cardHeight, 8, 8, 'F');
+          doc.setGState(new doc.GState({ opacity: 1 }));
+          
+          // Card background
+          doc.setFillColor(...stat.bgColor);
+          doc.roundedRect(x, yPos, cardWidth, cardHeight, 8, 8, 'F');
+          
+          // Card border
+          doc.setDrawColor(...stat.color);
+          doc.setLineWidth(2);
+          doc.roundedRect(x, yPos, cardWidth, cardHeight, 8, 8, 'S');
+          
+          // Value
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(28);
+          doc.setTextColor(...stat.color);
+          doc.text(stat.value.toString(), x + cardWidth - 15, yPos + 45, { align: 'right' });
+          
+          // Label
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.setTextColor(...colors.textLight);
+          doc.text(stat.label, x + cardWidth / 2, yPos + 70, { align: 'center' });
+        });
+  
+        yPos += cardHeight + 50;
+      }
+  
+      // === SCHEDULE DETAILS SECTION ===
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(...colors.text);
+      doc.text('Schedule Details', 40, yPos);
+      doc.setFillColor(...colors.primary);
+      doc.rect(40, yPos + 6, 60, 3, 'F');
+      yPos += 35;
+  
+      // Filter schedules based on current filters
+      const filteredSchedules = schedules.filter(schedule => {
+        const scheduleDate = new Date(schedule.date);
+        const employeeName = schedule.employee ? `${schedule.employee.firstName} ${schedule.employee.lastName}` : '';
+        const matchesSearch = !searchTerm || 
+          employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          schedule.department?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesDepartment = !filterDepartment || schedule.department === filterDepartment;
+        const matchesShiftType = !filterShiftType || schedule.shift?.type === filterShiftType;
+        
+        let matchesDateRange = true;
+        if (filterDateRange === 'monthly') {
+          matchesDateRange = scheduleDate.getMonth() === selectedDate.getMonth() && 
+                           scheduleDate.getFullYear() === selectedDate.getFullYear();
+        }
+
+        return matchesSearch && matchesDepartment && matchesShiftType && matchesDateRange;
+      });
+  
+      if (filteredSchedules.length === 0) {
+        doc.setFontSize(12);
+        doc.setTextColor(...colors.textLight);
+        doc.text('No schedules found for the selected criteria', 40, yPos);
+      } else {
+        // Table headers
+        const headers = ['Date', 'Employee', 'Department', 'Shift Type', 'Start', 'End', 'Status'];
+        const columnWidths = [75, 95, 85, 75, 55, 55, 70];
+        const startX = 40;
+        const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+  
+        // Enhanced table header
+        doc.setFillColor(...colors.primaryDark);
+        doc.rect(startX, yPos, tableWidth, 30, 'F');
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(255, 255, 255);
+        let xPos = startX;
+        headers.forEach((h, i) => {
+          doc.text(h, xPos + columnWidths[i] / 2, yPos + 19, { align: 'center' });
+          xPos += columnWidths[i];
+        });
+  
+        yPos += 30;
+  
+        // Table rows with enhanced styling
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        
+        filteredSchedules.slice(0, 50).forEach((schedule, index) => {
+          if (yPos > pageHeight - 100) {
+            doc.addPage();
+            yPos = 80;
+          }
+  
+          // Alternating row colors
+          if (index % 2 === 0) {
+            doc.setFillColor(...colors.bgLight);
+            doc.rect(startX, yPos, tableWidth, 28, 'F');
+          }
+  
+          const rowData = [
+            new Date(schedule.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            schedule.employee ? `${schedule.employee.firstName} ${schedule.employee.lastName}` : 'N/A',
+            schedule.department || 'N/A',
+            schedule.shift?.type || 'N/A',
+            schedule.shift?.startTime || 'N/A',
+            schedule.shift?.endTime || 'N/A',
+            schedule.status || 'Active'
+          ];
+  
+          xPos = startX;
+          rowData.forEach((cell, cellIndex) => {
+            if (cellIndex === 6) { // Status column
+              const statusMap = {
+                'Active': { color: [34, 197, 94], bg: colors.successLight },
+                'Completed': { color: [34, 197, 94], bg: colors.successLight },
+                'Cancelled': { color: [239, 68, 68], bg: colors.dangerLight },
+                'Pending': { color: [245, 158, 11], bg: colors.warningLight }
+              };
+              const style = statusMap[cell] || { color: colors.textLight, bg: [240, 240, 240] };
+              
+              doc.setFillColor(...style.bg);
+              doc.roundedRect(xPos + 8, yPos + 6, 52, 16, 3, 3, 'F');
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(8);
+              doc.setTextColor(...style.color);
+              doc.text(cell, xPos + columnWidths[cellIndex] / 2, yPos + 16, { align: 'center' });
+            } else {
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(9);
+              doc.setTextColor(...colors.text);
+              doc.text(cell, xPos + columnWidths[cellIndex] / 2, yPos + 16, { align: 'center' });
+            }
+            xPos += columnWidths[cellIndex];
+          });
+  
+          // Row divider
+          doc.setDrawColor(...colors.border);
+          doc.setLineWidth(0.5);
+          doc.line(startX, yPos + 28, startX + tableWidth, yPos + 28);
+          
+          yPos += 28;
+        });
+  
+        if (filteredSchedules.length > 50) {
+          yPos += 15;
+          doc.setFontSize(10);
+          doc.setTextColor(...colors.textLight);
+          doc.setFont('helvetica', 'italic');
+          doc.text(`Note: Showing first 50 of ${filteredSchedules.length} schedules`, 40, yPos);
+        }
+      }
+  
+      // === SIGNATURE SECTION ===
+      yPos = pageHeight - 120;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.textLight);
+      doc.text('Authorized Signature:', 60, yPos);
+      doc.setDrawColor(...colors.borderDark);
+      doc.setLineWidth(1);
+      doc.line(160, yPos, 280, yPos);
+      
+      doc.text('Date:', pageWidth - 200, yPos);
+      doc.line(pageWidth - 160, yPos, pageWidth - 60, yPos);
+  
+      // === FOOTER ON ALL PAGES ===
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        
+        // Footer line
+        doc.setDrawColor(...colors.border);
+        doc.setLineWidth(0.5);
+        doc.line(40, pageHeight - 50, pageWidth - 40, pageHeight - 50);
+        
+        // Footer content
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.textLighter);
+        doc.text(`Page ${i} of ${pageCount}`, 40, pageHeight - 35);
+        doc.text('CONFIDENTIAL — Internal Use Only', pageWidth / 2, pageHeight - 35, { align: 'center' });
+        doc.text('WorkPulse Schedule System', pageWidth - 40, pageHeight - 35, { align: 'right' });
+        
+        // Watermark on content pages
+        if (i > 0 && logoDataUrl) {
+          doc.setGState(new doc.GState({ opacity: 0.03 }));
+          doc.addImage(logoDataUrl, 'PNG', pageWidth / 2 - 80, pageHeight / 2 - 80, 160, 160);
+          doc.setGState(new doc.GState({ opacity: 1 }));
+        }
+      }
+  
+      // Save PDF
+      const filename = `CGH_Shift_Schedule_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+      
+      showToast?.('📄 Schedule report exported successfully!', 'success');
+    } catch (error) {
+      console.error('❌ Error exporting PDF:', error);
+      showToast?.(`Failed to export PDF: ${error.message}`, 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="p-6">
@@ -439,9 +785,33 @@ const ShiftManagement = () => {
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-2">
-                <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors">
-                  <Download className="w-4 h-4" />
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  {showExportDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                      <button
+                        onClick={() => {
+                          exportToPDF();
+                        }}
+                        disabled={isExporting}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {isExporting ? 'Exporting...' : 'Download PDF'}
+                          </div>
+                          <div className="text-xs text-gray-500">Schedule report</div>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center"
@@ -1312,6 +1682,14 @@ const CreateEditShiftModal = ({ schedule, employees, onClose, onSuccess }) => {
           </form>
         </div>
       </div>
+
+      {/* Close dropdown when clicking outside */}
+      {showExportDropdown && (
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => setShowExportDropdown(false)}
+        />
+      )}
     </div>
   );
 };

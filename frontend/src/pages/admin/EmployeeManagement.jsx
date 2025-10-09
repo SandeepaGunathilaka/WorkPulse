@@ -132,9 +132,9 @@ const AdminEmployeeManagement = () => {
     setShowExportModal(true);
   };
 
-  const handleExportAll = (options) => {
+  const handleExportAll = async (options) => {
     try {
-      const fileName = pdfExportService.exportEmployeesToPDF(employees, {}, options);
+      const fileName = await pdfExportService.exportEmployeesToPDF(employees, {}, options);
       showSuccess(`Complete employee report exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -142,7 +142,7 @@ const AdminEmployeeManagement = () => {
     }
   };
 
-  const handleExportFiltered = (options) => {
+  const handleExportFiltered = async (options) => {
     try {
       const currentFilters = {
         search: searchTerm,
@@ -156,7 +156,7 @@ const AdminEmployeeManagement = () => {
         if (!currentFilters[key]) delete currentFilters[key];
       });
 
-      const fileName = pdfExportService.exportEmployeesToPDF(filteredEmployees, currentFilters, options);
+      const fileName = await pdfExportService.exportEmployeesToPDF(filteredEmployees, currentFilters, options);
       showSuccess(`Filtered employee report exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -164,9 +164,9 @@ const AdminEmployeeManagement = () => {
     }
   };
 
-  const handleExportEmployeeDetails = (employee) => {
+  const handleExportEmployeeDetails = async (employee) => {
     try {
-      const fileName = pdfExportService.exportEmployeeDetailsPDF(employee);
+      const fileName = await pdfExportService.exportEmployeeDetailsPDF(employee);
       showSuccess(`Employee details exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export employee details:', error);
@@ -176,13 +176,22 @@ const AdminEmployeeManagement = () => {
 
   const handleToggleStatus = async (employee) => {
     try {
-      const newStatus = employee.employmentStatus === 'active' ? 'inactive' : 'active';
-      const response = await employeeService.updateEmployee(employee._id, {
-        employmentStatus: newStatus
-      });
+      let response;
+      if (employee.isActive) {
+        // Deactivate employee
+        response = await employeeService.deactivateEmployee(employee._id);
+        if (response.success) {
+          showSuccess('Employee deactivated successfully. They cannot log in until reactivated.');
+        }
+      } else {
+        // Activate employee
+        response = await employeeService.activateEmployee(employee._id);
+        if (response.success) {
+          showSuccess('Employee activated successfully. They can now log in to the system.');
+        }
+      }
 
       if (response.success) {
-        showSuccess(`Employee ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
         fetchEmployees();
       } else {
         throw new Error(response.message || 'Failed to update employee status');
@@ -218,7 +227,7 @@ const AdminEmployeeManagement = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Admin Employee Management</h1>
-          <p className="text-gray-600">Manage employee passwords, status, and permissions</p>
+          <p className="text-gray-600">Manage employee login access, passwords, and permissions</p>
         </div>
         <div className="flex gap-3">
           <PermissionGate module="reports" action="export">
@@ -232,7 +241,7 @@ const AdminEmployeeManagement = () => {
           </PermissionGate>
           <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
             <p className="text-sm text-purple-700">
-              <span className="font-medium">Note:</span> Employee registration is done by HR. Admin manages passwords & permissions.
+              <span className="font-medium">Note:</span> Employee registration is done by HR. Admin manages login access, passwords & permissions. Deactivated employees cannot log in until reactivated.
             </p>
           </div>
         </div>
@@ -310,9 +319,9 @@ const AdminEmployeeManagement = () => {
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Active</p>
+              <p className="text-sm font-medium text-gray-600">Login Enabled</p>
               <p className="text-2xl font-bold text-green-600">
-                {employees.filter(emp => emp.employmentStatus === 'active').length}
+                {employees.filter(emp => emp.isActive).length}
               </p>
             </div>
             <UserCheck className="w-8 h-8 text-green-600" />
@@ -322,9 +331,9 @@ const AdminEmployeeManagement = () => {
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Inactive</p>
+              <p className="text-sm font-medium text-gray-600">Login Disabled</p>
               <p className="text-2xl font-bold text-red-600">
-                {employees.filter(emp => emp.employmentStatus === 'inactive').length}
+                {employees.filter(emp => !emp.isActive).length}
               </p>
             </div>
             <UserX className="w-8 h-8 text-red-600" />
@@ -418,14 +427,21 @@ const AdminEmployeeManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        employee.employmentStatus === 'active' ? 'bg-green-100 text-green-800' :
-                        employee.employmentStatus === 'inactive' ? 'bg-red-100 text-red-800' :
-                        employee.employmentStatus === 'on-leave' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {employee.employmentStatus}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {employee.isActive ? 'Active' : 'Deactivated'}
+                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          employee.employmentStatus === 'active' ? 'bg-blue-100 text-blue-800' :
+                          employee.employmentStatus === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                          employee.employmentStatus === 'on-leave' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {employee.employmentStatus}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {new Date(employee.joiningDate).toLocaleDateString()}
@@ -475,13 +491,13 @@ const AdminEmployeeManagement = () => {
                           <button
                             onClick={() => handleToggleStatus(employee)}
                             className={`p-1 rounded ${
-                              employee.employmentStatus === 'active'
+                              employee.isActive
                                 ? 'text-red-600 hover:text-red-900'
                                 : 'text-green-600 hover:text-green-900'
                             }`}
-                            title={employee.employmentStatus === 'active' ? 'Deactivate Employee' : 'Activate Employee'}
+                            title={employee.isActive ? 'Deactivate Employee (Prevent Login)' : 'Activate Employee (Allow Login)'}
                           >
-                            {employee.employmentStatus === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                            {employee.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                           </button>
                         </PermissionGate>
 
@@ -585,7 +601,7 @@ const AdminEditEmployeeModal = ({ employee, onClose, onSuccess, departments }) =
 
 
     const nameRegex = /^[a-zA-Z\s]+$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9@._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
     if (formData.firstName && !nameRegex.test(formData.firstName)) {
       showError('First name can only contain letters and spaces');
@@ -596,7 +612,7 @@ const AdminEditEmployeeModal = ({ employee, onClose, onSuccess, departments }) =
       return;
     }
     if (formData.email && !emailRegex.test(formData.email)) {
-      showError('Invalid email format');
+      showError('Email must contain only letters, numbers, @ symbol, dots, and hyphens');
       return;
     }
     setLoading(true);
@@ -630,7 +646,7 @@ const handleChange = (e) => {
     }));
   } else if (name === 'email') {
     let newValue = value.toLowerCase(); // convert to lowercase
-    newValue = newValue.replace(/[^a-z0-9@.]/g, ''); // only letters, numbers, @, .
+    newValue = newValue.replace(/[^a-z0-9@._-]/g, ''); // only letters, numbers, @, ., _, -
 
     // Only allow one @
     const atIndex = newValue.indexOf('@');
@@ -687,6 +703,7 @@ const handleChange = (e) => {
                 maxLength={20}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               />
+              <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
@@ -699,6 +716,7 @@ const handleChange = (e) => {
                 maxLength={20}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               />
+              <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
             </div>
           </div>
 
@@ -712,6 +730,7 @@ const handleChange = (e) => {
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
+            <p className="mt-1 text-xs text-gray-500">Letters, numbers, @ symbol, dots, and hyphens only</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

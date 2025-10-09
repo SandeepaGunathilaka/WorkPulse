@@ -141,9 +141,9 @@ const EmployeeManagement = () => {
     setShowExportModal(true);
   };
 
-  const handleExportAll = (options) => {
+  const handleExportAll = async (options) => {
     try {
-      const fileName = pdfExportService.exportEmployeesToPDF(employees, {}, options);
+      const fileName = await pdfExportService.exportEmployeesToPDF(employees, {}, options);
       showSuccess(`Complete employee report exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -151,7 +151,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  const handleExportFiltered = (options) => {
+  const handleExportFiltered = async (options) => {
     try {
       const currentFilters = {
         search: searchTerm,
@@ -165,7 +165,7 @@ const EmployeeManagement = () => {
         if (!currentFilters[key]) delete currentFilters[key];
       });
 
-      const fileName = pdfExportService.exportEmployeesToPDF(filteredEmployees, currentFilters, options);
+      const fileName = await pdfExportService.exportEmployeesToPDF(filteredEmployees, currentFilters, options);
       showSuccess(`Filtered employee report exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -173,9 +173,9 @@ const EmployeeManagement = () => {
     }
   };
 
-  const handleExportEmployeeDetails = (employee) => {
+  const handleExportEmployeeDetails = async (employee) => {
     try {
-      const fileName = pdfExportService.exportEmployeeDetailsPDF(employee);
+      const fileName = await pdfExportService.exportEmployeeDetailsPDF(employee);
       showSuccess(`Employee details exported successfully as ${fileName}`);
     } catch (error) {
       console.error('Failed to export employee details:', error);
@@ -1344,6 +1344,24 @@ const EditEmployeeModal = ({ employee, onClose, onSuccess, departments }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validation
+    const nameRegex = /^[a-zA-Z\s]+$/;
+    const emailRegex = /^[a-zA-Z0-9@._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if (!nameRegex.test(formData.firstName.trim())) {
+      showError('First name can only contain letters and spaces');
+      return;
+    }
+    if (!nameRegex.test(formData.lastName.trim())) {
+      showError('Last name can only contain letters and spaces');
+      return;
+    }
+    if (!emailRegex.test(formData.email.trim())) {
+      showError('Email must contain only letters, numbers, @ symbol, dots, and hyphens');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -1366,9 +1384,20 @@ const EditEmployeeModal = ({ employee, onClose, onSuccess, departments }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    let filteredValue = value;
+
+    // Filter input based on field type
+    if (name === 'firstName' || name === 'lastName') {
+      // Only allow letters and spaces for names
+      filteredValue = value.replace(/[^a-zA-Z\s]/g, '');
+    } else if (name === 'email') {
+      // Only allow letters, numbers, @ symbol, dots, and common email characters
+      filteredValue = value.replace(/[^a-zA-Z0-9@._-]/g, '');
+    }
+
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: filteredValue
     }));
   };
 
@@ -1392,6 +1421,7 @@ const EditEmployeeModal = ({ employee, onClose, onSuccess, departments }) => {
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+              <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
@@ -1403,6 +1433,7 @@ const EditEmployeeModal = ({ employee, onClose, onSuccess, departments }) => {
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+              <p className="mt-1 text-xs text-gray-500">Letters and spaces only</p>
             </div>
           </div>
 
@@ -1416,6 +1447,7 @@ const EditEmployeeModal = ({ employee, onClose, onSuccess, departments }) => {
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            <p className="mt-1 text-xs text-gray-500">Letters, numbers, @ symbol, dots, and hyphens only</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

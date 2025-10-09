@@ -66,6 +66,16 @@ const HRSidebar = ({ isOpen, onClose }) => {
       ]
     },
     {
+      id: 'attendance',
+      title: 'Attendance',
+      icon: Calendar,
+      expandable: true,
+      submenu: [
+        { title: 'View Attendance', icon: Calendar, path: '/hr/attendance/view' },
+        { title: 'Attendance Records', icon: ClipboardList, path: '/hr/attendance/records' }
+      ]
+    },
+    {
       id: 'reports',
       title: 'Reports',
       icon: BarChart3,

@@ -10,14 +10,11 @@ import {
   Download,
   Search,
   FileText,
-  FileSpreadsheet,
   ChevronDown
 } from 'lucide-react';
 import attendanceService from '../../services/attendanceService';
 import { useToast } from '../../contexts/ToastContext';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 const AttendanceHistory = () => {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
@@ -58,16 +55,28 @@ const AttendanceHistory = () => {
       };
 
       const response = await attendanceService.getMyAttendance(params);
+      console.log('📊 Attendance History Response:', response);
 
       if (response.success) {
         setAttendanceHistory(response.data || []);
         setPagination(response.pagination || { current: 1, pages: 1, total: 0 });
         setSummary(response.summary || { totalDays: 0, totalHours: 0, presentDays: 0, lateDays: 0 });
+      } else {
+        console.error('❌ API Response Error:', response);
+        if (showToast) {
+          showToast(response.message || 'Failed to fetch attendance history', 'error');
+        }
       }
     } catch (error) {
-      console.error('Error fetching attendance history:', error);
+      console.error('❌ Error fetching attendance history:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       if (showToast) {
-        showToast('Failed to fetch attendance history', 'error');
+        showToast(`Failed to fetch attendance history: ${error.message}`, 'error');
       }
     } finally {
       setLoading(false);
@@ -170,212 +179,326 @@ const AttendanceHistory = () => {
     record.status.toLowerCase().includes(filters.search.toLowerCase())
   );
 
-  // Export Functions
+  //PDF Export
   const exportToPDF = async () => {
+    console.log('🔄 PDF Export button clicked');
     setIsExporting(true);
+  
     try {
-      console.log('🚀 Starting PDF export...');
-      console.log('📊 Data to export:', {
-        historyCount: filteredHistory.length,
-        summary,
-        currentDate: format(currentDate, 'yyyy-MM')
-      });
-
-      // Check if we have data
       if (!filteredHistory || filteredHistory.length === 0) {
-        if (showToast) {
-          showToast('No attendance data to export. Please select a month with attendance records.', 'warning');
-        }
+        const doc = new jsPDF();
+        doc.text('No Attendance Data Available', 20, 20);
+        doc.save(`empty-attendance-report-${format(currentDate, 'yyyy-MM')}.pdf`);
+        showToast?.('No data available — test PDF generated.', 'info');
         return;
       }
-
-      const doc = new jsPDF();
-
-      // Add header
-      doc.setFontSize(20);
-      doc.setTextColor(59, 130, 246); // blue-600
-      doc.text('WorkPulse - Attendance Report', 14, 22);
-
-      doc.setFontSize(12);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Period: ${format(currentDate, 'MMMM yyyy')}`, 14, 32);
-      doc.text(`Generated on: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 40);
-
-      // Add summary section
-      doc.setFontSize(14);
-      doc.setTextColor(0, 0, 0);
-      doc.text('Summary Statistics:', 14, 55);
-
+  
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+  
+      // === LIGHT COLOR PALETTE ===
+      const colors = {
+        primary: [147, 197, 253],       // Light Blue
+        primaryDark: [96, 165, 250],    // Sky Blue
+        accent: [167, 243, 208],        // Light Emerald
+        accentLight: [209, 250, 229],   // Lighter Emerald
+        text: [75, 85, 99],             // Medium Gray
+        textLight: [107, 114, 128],     // Light Gray
+        textLighter: [156, 163, 175],   // Lighter Gray
+        border: [229, 231, 235],        // Border Gray
+        borderDark: [209, 213, 219],    // Darker Border
+        bgLight: [249, 250, 251],       // Off White
+        bgCard: [255, 255, 255],        // Pure White
+        success: [134, 239, 172],       // Light Green
+        successLight: [220, 252, 231],  // Lighter Green
+        warning: [253, 224, 71],        // Light Yellow
+        warningLight: [254, 249, 195],  // Lighter Yellow
+        danger: [252, 165, 165],        // Light Red
+        dangerLight: [254, 226, 226],   // Lighter Red
+        shadow: [0, 0, 0, 0.08],        // Subtle Shadow
+      };
+  
+      // === LOAD LOGO ===
+      const loadImageAsDataURL = (src) =>
+        new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.onerror = () => resolve(null);
+          img.src = src;
+        });
+  
+      const logoDataUrl = await loadImageAsDataURL('/Logo.png').catch(() => null);
+  
+      // === PROFESSIONAL HEADER ===
+      // Header background with subtle gradient effect
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageWidth, 110, 'F');
+      doc.setFillColor(...colors.primary);
+      doc.rect(0, 0, pageWidth, 4, 'F');
+  
+      if (logoDataUrl) {
+        doc.addImage(logoDataUrl, 'PNG', 40, 25, 70, 70);
+      }
+  
+      // Organization details
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(...colors.text);
+      doc.text('Colombo General Hospital', pageWidth - 40, 38, { align: 'right' });
+  
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text('123 Hospital Street, Colombo 07, Sri Lanka', pageWidth - 40, 56, { align: 'right' });
+      doc.text('Tel: +94 11 123 4567  |  Email: info@cgh.lk', pageWidth - 40, 70, { align: 'right' });
+  
+      // Divider
+      doc.setDrawColor(...colors.border);
+      doc.setLineWidth(1);
+      doc.line(40, 110, pageWidth - 40, 110);
+  
+      let yPos = 150;
+  
+      // === EXECUTIVE SUMMARY SECTION ===
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(...colors.text);
+      doc.text('Executive Summary', 40, yPos);
+      
+      // Accent underline
+      doc.setFillColor(...colors.primary);
+      doc.rect(40, yPos + 6, 60, 3, 'F');
+      yPos += 40;
+  
+      // === ENHANCED STATISTICS CARDS ===
+      const stats = [
+        { label: 'Total Days', value: summary.totalDays || 0, color: colors.primaryDark, bgColor: [219, 234, 254] },
+        { label: 'Present', value: summary.presentDays || 0, color: [34, 197, 94], bgColor: colors.successLight },
+        { label: 'Absent', value: summary.absentDays || 0, color: [239, 68, 68], bgColor: colors.dangerLight },
+        { label: 'Late Arrivals', value: summary.lateDays || 0, color: [245, 158, 11], bgColor: colors.warningLight },
+      ];
+  
+      const cardWidth = 125;
+      const cardHeight = 95;
+      const cardSpacing = 10;
+  
+      stats.forEach((s, i) => {
+        const x = 40 + i * (cardWidth + cardSpacing);
+        
+        // Card shadow
+        doc.setFillColor(0, 0, 0);
+        doc.setGState(new doc.GState({ opacity: 0.08 }));
+        doc.roundedRect(x + 2, yPos + 2, cardWidth, cardHeight, 8, 8, 'F');
+        doc.setGState(new doc.GState({ opacity: 1 }));
+        
+        // Card background
+        doc.setFillColor(...s.bgColor);
+        doc.roundedRect(x, yPos, cardWidth, cardHeight, 8, 8, 'F');
+        
+        // Card border
+        doc.setDrawColor(...s.color);
+        doc.setLineWidth(2);
+        doc.roundedRect(x, yPos, cardWidth, cardHeight, 8, 8, 'S');
+        
+        // Value
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(28);
+        doc.setTextColor(...s.color);
+        doc.text(String(s.value), x + cardWidth - 15, yPos + 40, { align: 'right' });
+        
+        // Label
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(...colors.textLight);
+        doc.text(s.label, x + cardWidth / 2, yPos + 75, { align: 'center' });
+      });
+  
+      yPos += cardHeight + 50;
+  
+      // === ATTENDANCE RATE BANNER ===
+      const attendanceRate = summary.totalDays
+        ? Math.round((summary.presentDays / summary.totalDays) * 100)
+        : 0;
+  
+      const bannerHeight = 70;
+      const bannerY = yPos;
+      
+      // Banner background with gradient effect
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(40, bannerY, pageWidth - 80, bannerHeight, 8, 8, 'F');
+      doc.setDrawColor(...colors.border);
+      doc.setLineWidth(1);
+      doc.roundedRect(40, bannerY, pageWidth - 80, bannerHeight, 8, 8, 'S');
+      
+      // Left accent
+      doc.setFillColor(...colors.primary);
+      doc.roundedRect(40, bannerY, 6, bannerHeight, 8, 8, 'F');
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.textLight);
+      doc.text('Overall Attendance Rate', 60, bannerY + 30);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(32);
+      doc.setTextColor(...colors.primary);
+      doc.text(`${attendanceRate}%`, 60, bannerY + 58);
+  
+      yPos += bannerHeight + 50;
+  
+      // === DETAILED RECORDS SECTION ===
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(...colors.text);
+      doc.text('Detailed Attendance Records', 40, yPos);
+      doc.setFillColor(...colors.primary);
+      doc.rect(40, yPos + 6, 60, 3, 'F');
+      yPos += 35;
+  
+      const headers = ['Date', 'Status', 'Clock In', 'Clock Out', 'Hours', 'Breaks'];
+      const columnWidths = [75, 70, 65, 65, 55, 50];
+      const startX = 40;
+      const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+  
+      // Enhanced table header
+      doc.setFillColor(...colors.primaryDark);
+      doc.rect(startX, yPos, tableWidth, 30, 'F');
+      
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.setTextColor(60, 60, 60);
-      doc.text(`Total Working Days: ${summary.totalDays || 0}`, 14, 65);
-      doc.text(`Present Days: ${summary.presentDays || 0}`, 14, 73);
-      doc.text(`Late Days: ${summary.lateDays || 0}`, 110, 65);
-      doc.text(`Total Hours: ${formatDuration(summary.totalHours) || '0h 0m'}`, 110, 73);
-
-      // Prepare table data with better error handling
-      const tableData = filteredHistory.map(record => {
-        try {
-          return [
-            record.date ? format(parseISO(record.date), 'dd/MM/yyyy') : 'N/A',
-            record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('-', ' ') : 'Unknown',
-            formatTime(record.checkIn?.time) || '-',
-            formatTime(record.checkOut?.time) || (record.checkOut?.time ? 'Working...' : '-'),
-            record.workHours ? formatDuration(record.workHours) : calculateWorkDuration(record.checkIn, record.checkOut),
-            `${record.breaks?.length || 0} breaks`,
-            record.checkIn?.location?.latitude ? 'Tracked' : 'No location'
-          ];
-        } catch (err) {
-          console.error('Error processing record:', record, err);
-          return ['Error', 'Error', 'Error', 'Error', 'Error', 'Error', 'Error'];
+      doc.setTextColor(255, 255, 255);
+      let xPos = startX;
+      headers.forEach((h, i) => {
+        doc.text(h, xPos + columnWidths[i] / 2, yPos + 19, { align: 'center' });
+        xPos += columnWidths[i];
+      });
+  
+      yPos += 30;
+  
+      // Table rows with enhanced styling
+      filteredHistory.forEach((record, i) => {
+        if (yPos > pageHeight - 100) {
+          doc.addPage();
+          yPos = 80;
         }
-      });
-
-      console.log('📋 Table data prepared:', tableData.length, 'rows');
-
-      // Add table with better configuration
-      autoTable(doc, {
-        head: [['Date', 'Status', 'Check In', 'Check Out', 'Duration', 'Breaks', 'Location']],
-        body: tableData,
-        startY: 85,
-        theme: 'grid',
-        headStyles: {
-          fillColor: [59, 130, 246],
-          textColor: [255, 255, 255],
-          fontSize: 10,
-          fontStyle: 'bold',
-          halign: 'center'
-        },
-        bodyStyles: {
-          fontSize: 9,
-          cellPadding: 3,
-          halign: 'center'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252]
-        },
-        columnStyles: {
-          0: { cellWidth: 25, halign: 'center' },
-          1: { cellWidth: 25, halign: 'center' },
-          2: { cellWidth: 20, halign: 'center' },
-          3: { cellWidth: 20, halign: 'center' },
-          4: { cellWidth: 25, halign: 'center' },
-          5: { cellWidth: 20, halign: 'center' },
-          6: { cellWidth: 25, halign: 'center' }
-        },
-        margin: { top: 85, left: 14, right: 14 },
-        tableWidth: 'auto'
-      });
-
-      // Generate filename
-      const filename = `attendance-report-${format(currentDate, 'yyyy-MM')}.pdf`;
-      console.log('💾 Saving PDF as:', filename);
-
-      // Save the PDF
-      doc.save(filename);
-
-      console.log('✅ PDF export completed successfully!');
-      if (showToast) {
-        showToast('📄 PDF report exported successfully!', 'success');
-      }
-    } catch (error) {
-      console.error('❌ Error exporting PDF:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-      if (showToast) {
-        showToast(`Failed to export PDF: ${error.message}`, 'error');
-      }
-    } finally {
-      setIsExporting(false);
-      setShowExportDropdown(false);
-    }
-  };
-
-  const exportToExcel = async () => {
-    setIsExporting(true);
-    try {
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-
-      // Summary sheet data
-      const summaryData = [
-        ['Attendance Summary Report'],
-        [''],
-        ['Period:', format(currentDate, 'MMMM yyyy')],
-        ['Generated on:', format(new Date(), 'dd/MM/yyyy HH:mm')],
-        [''],
-        ['Summary Statistics:'],
-        ['Total Days', summary.totalDays],
-        ['Present Days', summary.presentDays],
-        ['Late Days', summary.lateDays],
-        ['Total Hours', formatDuration(summary.totalHours)],
-        ['']
-      ];
-
-      // Attendance data
-      const attendanceData = [
-        ['Date', 'Day', 'Status', 'Check In', 'Check Out', 'Work Duration', 'Breaks', 'Location'],
-        ...filteredHistory.map(record => [
-          format(parseISO(record.date), 'dd/MM/yyyy'),
-          format(parseISO(record.date), 'EEEE'),
-          record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('-', ' '),
-          formatTime(record.checkIn?.time),
-          formatTime(record.checkOut?.time) || 'Working...',
-          record.workHours ? formatDuration(record.workHours) : calculateWorkDuration(record.checkIn, record.checkOut),
-          (record.breaks?.length || 0) + ' breaks',
-          record.checkIn?.location?.latitude ? 'Tracked' : 'No location'
-        ])
-      ];
-
-      // Create summary worksheet
-      const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Summary');
-
-      // Create attendance worksheet
-      const attendanceWorksheet = XLSX.utils.aoa_to_sheet(attendanceData);
-      XLSX.utils.book_append_sheet(workbook, attendanceWorksheet, 'Attendance Records');
-
-      // Style the worksheets (basic styling)
-      const range = XLSX.utils.decode_range(summaryWorksheet['!ref']);
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-          if (!summaryWorksheet[cellAddress]) continue;
-
-          if (R === 0) { // Header row
-            summaryWorksheet[cellAddress].s = {
-              font: { bold: true, sz: 16 },
-              fill: { fgColor: { rgb: "3B82F6" } }
+  
+        // Alternating row colors
+        if (i % 2 === 0) {
+          doc.setFillColor(...colors.bgLight);
+          doc.rect(startX, yPos, tableWidth, 28, 'F');
+        }
+  
+        const rowData = [
+          record.date ? format(parseISO(record.date), 'dd/MM/yyyy') : 'N/A',
+          record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : 'Unknown',
+          formatTime(record.checkIn?.time) || '-',
+          formatTime(record.checkOut?.time) || '-',
+          record.workHours ? formatDuration(record.workHours) : '-',
+          `${record.breaks?.length || 0}`,
+        ];
+  
+        xPos = startX;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+  
+        rowData.forEach((cell, idx) => {
+          if (idx === 1) {
+            // Status badge
+            const statusMap = {
+              Present: { color: [34, 197, 94], bg: colors.successLight },
+              Absent: { color: [239, 68, 68], bg: colors.dangerLight },
+              Late: { color: [245, 158, 11], bg: colors.warningLight },
             };
+            const style = statusMap[cell] || { color: colors.textLight, bg: [240, 240, 240] };
+            
+            doc.setFillColor(...style.bg);
+            doc.roundedRect(xPos + 8, yPos + 6, 52, 16, 3, 3, 'F');
+            
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(...style.color);
+            doc.text(cell, xPos + columnWidths[idx] / 2, yPos + 16, { align: 'center' });
+          } else {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...colors.text);
+            doc.text(cell, xPos + columnWidths[idx] / 2, yPos + 16, { align: 'center' });
           }
+          xPos += columnWidths[idx];
+        });
+  
+        // Row divider
+        doc.setDrawColor(...colors.border);
+        doc.setLineWidth(0.5);
+        doc.line(startX, yPos + 28, startX + tableWidth, yPos + 28);
+        
+        yPos += 28;
+      });
+  
+      // === SIGNATURE SECTION ===
+      yPos = pageHeight - 120;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.textLight);
+      doc.text('Authorized Signature:', 60, yPos);
+      doc.setDrawColor(...colors.borderDark);
+      doc.setLineWidth(1);
+      doc.line(160, yPos, 280, yPos);
+      
+      doc.text('Date:', pageWidth - 200, yPos);
+      doc.line(pageWidth - 160, yPos, pageWidth - 60, yPos);
+  
+      // === FOOTER ON ALL PAGES ===
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        
+        // Footer line
+        doc.setDrawColor(...colors.border);
+        doc.setLineWidth(0.5);
+        doc.line(40, pageHeight - 50, pageWidth - 40, pageHeight - 50);
+        
+        // Footer content
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.textLighter);
+        doc.text(`Page ${i} of ${pageCount}`, 40, pageHeight - 35);
+        doc.text('CONFIDENTIAL — Internal Use Only', pageWidth / 2, pageHeight - 35, { align: 'center' });
+        doc.text('WorkPulse Attendance System', pageWidth - 40, pageHeight - 35, { align: 'right' });
+        
+        // Watermark on content pages
+        if (i > 1 && logoDataUrl) {
+          doc.setGState(new doc.GState({ opacity: 0.03 }));
+          doc.addImage(logoDataUrl, 'PNG', pageWidth / 2 - 80, pageHeight / 2 - 80, 160, 160);
+          doc.setGState(new doc.GState({ opacity: 1 }));
         }
       }
-
-      // Save the Excel file
-      XLSX.writeFile(workbook, `attendance-report-${format(currentDate, 'yyyy-MM')}.xlsx`);
-
-      if (showToast) {
-        showToast('Excel report exported successfully!', 'success');
-      }
+  
+      const filename = `CGH_Attendance_Report_${format(currentDate, 'yyyy-MM')}.pdf`;
+      doc.save(filename);
+      showToast?.('📄 Professional PDF exported successfully!', 'success');
     } catch (error) {
-      console.error('Error exporting Excel:', error);
-      if (showToast) {
-        showToast('Failed to export Excel report', 'error');
-      }
+      console.error('❌ PDF Export Error:', error);
+      showToast?.(`Failed to export PDF: ${error.message}`, 'error');
     } finally {
       setIsExporting(false);
       setShowExportDropdown(false);
     }
   };
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header with Beautiful Background */}
-        <div className="relative mb-8 p-8 rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 shadow-2xl overflow-hidden">
+        <div className="relative mb-8 p-8 rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 shadow-2xl">
           {/* Background Pattern */}
           <div className="absolute inset-0 opacity-10">
             <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/20 to-transparent"></div>
@@ -395,7 +518,11 @@ const AttendanceHistory = () => {
                 <button
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   disabled={isExporting || filteredHistory.length === 0}
-                  className="group inline-flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-sm font-medium text-white hover:bg-white/20 transition-all duration-300 hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`group inline-flex items-center px-6 py-3 backdrop-blur-sm border rounded-xl text-sm font-medium text-white transition-all duration-300 hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                    showExportDropdown 
+                      ? 'bg-white/20 border-white/30 shadow-lg' 
+                      : 'bg-white/10 border-white/20 hover:bg-white/20'
+                  }`}
                 >
                   {isExporting ? (
                     <>
@@ -413,8 +540,16 @@ const AttendanceHistory = () => {
 
                 {/* Export Dropdown */}
                 {showExportDropdown && !isExporting && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                    <div className="py-2">
+                  <>
+                    {/* Backdrop */}
+                    <div 
+                      className="fixed inset-0 z-[9998]" 
+                      onClick={() => setShowExportDropdown(false)}
+                    ></div>
+                    
+                    {/* Dropdown */}
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden animate-in slide-in-from-top-2 duration-200 ring-1 ring-gray-100">
+                      <div className="py-2">
                       <button
                         onClick={exportToPDF}
                         className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 group"
@@ -425,19 +560,9 @@ const AttendanceHistory = () => {
                           <div className="text-xs text-gray-500 group-hover:text-red-600">Professional report format</div>
                         </div>
                       </button>
-                      <div className="border-t border-gray-100 my-1"></div>
-                      <button
-                        onClick={exportToExcel}
-                        className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 transition-all duration-200 group"
-                      >
-                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500 group-hover:scale-110 transition-transform" />
-                        <div className="text-left">
-                          <div className="font-medium">Export as Excel</div>
-                          <div className="text-xs text-gray-500 group-hover:text-green-600">Spreadsheet with multiple sheets</div>
-                        </div>
-                      </button>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>

@@ -11,6 +11,7 @@ import SalaryManagement from '../admin/SalaryManagement';
 import SalaryRecords from './SalaryRecords';
 import SalaryReports from './SalaryReports';
 import AttendanceManagement from './AttendanceManagement';
+import AttendanceRecords from './AttendanceRecords';
 import LeaveRequests from './LeaveRequests';
 import LeaveBalance from './LeaveBalance';
 import EmployeeReports from './EmployeeReports';
@@ -472,7 +473,8 @@ const HRPortal = () => {
             <Route path="/" element={<HRDashboard />} />
             <Route path="/employees" element={<EmployeeManagement />} />
             <Route path="/employees/add" element={<AddEmployee />} />
-            <Route path="/attendance" element={<AttendanceManagement />} />
+            <Route path="/attendance/view" element={<AttendanceManagement />} />
+            <Route path="/attendance/records" element={<AttendanceRecords />} />
             <Route path="/leave/requests" element={<LeaveRequests />} />
             <Route path="/leave/balance" element={<LeaveBalance />} />
             <Route path="/salary/generate" element={<SalaryManagement />} />

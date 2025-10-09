@@ -261,9 +261,13 @@ const Login = () => {
                 </button>
               </form>
 
-              <div className="text-center text-sm text-gray-500 pt-4 border-t border-gray-200">
-                Need help? Contact your HR department
-              </div>
+      <div className="text-center text-sm text-gray-500 pt-4 border-t border-gray-200">
+          <a href="/contact-hr" className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium">
+          Need help? Contact your HR department
+             </a>
+
+      </div>
+
             </div>
 
             {/* Mobile Welcome Text */}

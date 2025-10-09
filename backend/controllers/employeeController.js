@@ -420,6 +420,15 @@ const updateEmployeeSalary = async (req, res) => {
 
     const updateData = {};
 
+    // Fetch current employee to compare basicSalary before update
+    const existingEmployee = await User.findById(id).select('basicSalary');
+    if (!existingEmployee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee not found'
+      });
+    }
+
     // Update salary information
     if (basicSalary !== undefined) updateData.basicSalary = basicSalary;
     if (salaryGrade !== undefined) updateData.salaryGrade = salaryGrade;
@@ -441,17 +450,25 @@ const updateEmployeeSalary = async (req, res) => {
       { new: true, runValidators: true }
     ).select('-password -twoFactorSecret -resetPasswordToken');
 
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: 'Employee not found'
-      });
+    // If basicSalary changed, recalculate all non-paid salary records for this employee
+    const didBasicSalaryChange = basicSalary !== undefined && Number(basicSalary) !== Number(existingEmployee.basicSalary || 0);
+    if (didBasicSalaryChange) {
+      const Salary = require('../models/Salary');
+      const salaryRecords = await Salary.find({ employee: id, status: { $ne: 'paid' } });
+
+      for (const record of salaryRecords) {
+        record.basicSalary = Number(basicSalary);
+        // Allowances dependent on basic salary will be recalculated in pre-save hook
+        await record.save();
+      }
     }
 
     res.json({
       success: true,
       data: employee,
-      message: 'Employee salary details updated successfully'
+      message: didBasicSalaryChange
+        ? 'Employee salary details updated and salary records recalculated successfully'
+        : 'Employee salary details updated successfully'
     });
 
   } catch (error) {

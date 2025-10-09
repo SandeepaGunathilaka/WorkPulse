@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { salaryService } from '../../services/salaryService';
 import { employeeService } from '../../services/employeeService';
+import payrollReportService from '../../services/payrollReportService';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency } from '../../utils/currencyFormatter';
 
@@ -194,27 +195,35 @@ const SalaryReports = () => {
     });
   };
 
-  const handleExportReport = () => {
-    // Generate CSV data
-    const csvData = [
-      ['Department', 'Employee Count', 'Total Salary', 'Average Salary'],
-      ...reportData.departmentBreakdown.map(dept => [
-        dept.department,
-        dept.employeeCount,
-        dept.totalSalary.toLocaleString(),
-        dept.averageSalary.toFixed(2)
-      ])
-    ];
+  const handleExportReport = async () => {
+    try {
+      setLoading(true);
+      
+      // Prepare report data for PDF generation
+      const pdfReportData = {
+        totalPayroll: reportData.totalPayroll,
+        totalEmployees: reportData.totalEmployees,
+        averageSalary: reportData.averageSalary,
+        totalDeductions: reportData.totalDeductions,
+        departmentBreakdown: reportData.departmentBreakdown,
+        salaryDistribution: reportData.salaryDistribution
+      };
 
-    const csvContent = csvData.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `salary_report_${months[filters.month - 1]}_${filters.year}.csv`;
-    a.click();
+      // Generate PDF report
+      const result = await payrollReportService.generatePayrollDistributionPDF(pdfReportData, {
+        month: months[filters.month - 1],
+        year: filters.year
+      });
 
-    showSuccess('Report exported successfully');
+      if (result.success) {
+        showSuccess('Payroll distribution report exported successfully');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      showError(error.message || 'Failed to export report');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -306,10 +315,15 @@ const SalaryReports = () => {
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-lg p-2">
                 <button
                   onClick={handleExportReport}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-lg flex items-center gap-3 font-semibold"
+                  disabled={loading}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-lg flex items-center gap-3 font-semibold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
-                  <Download className="w-5 h-5" />
-                  Export Report
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Download className="w-5 h-5" />
+                  )}
+                  {loading ? 'Generating PDF...' : 'Export Report'}
                 </button>
               </div>
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-lg p-2">

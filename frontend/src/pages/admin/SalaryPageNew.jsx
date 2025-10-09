@@ -277,6 +277,19 @@ const SalaryPage = () => {
     a.click();
   };
 
+  const exportToPDF = async () => {
+    try {
+      await salaryService.generateSalaryManagementPDF(filteredSalaries, {
+        month: filterMonth,
+        year: filterYear
+      });
+      showSuccess('Salary management PDF report exported successfully');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError(error.message || 'Failed to export salary management PDF report');
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
@@ -427,6 +440,13 @@ const SalaryPage = () => {
             <option value="paid">Paid</option>
           </select>
 
+          <button
+            onClick={exportToPDF}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Export PDF
+          </button>
           <button
             onClick={exportToCSV}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"

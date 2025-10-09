@@ -10,6 +10,7 @@ import { useToast } from '../../contexts/ToastContext';
 import leaveService from '../../services/leaveService';
 // import userService from '../../services/userService';
 import api from '../../services/api';
+import pdfExportService from '../../services/pdfExportService';
 import { format } from 'date-fns';
 
 const UltraBeautifulLeaveManagement = () => {
@@ -218,6 +219,40 @@ const UltraBeautifulLeaveManagement = () => {
     } catch (error) {
       console.error('Error exporting report:', error);
       showError('❌ Failed to export report');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      showSuccess('📄 Generating PDF report...');
+
+      // Get current filters if any
+      const currentFilters = {};
+      if (activeTab === 'pending') {
+        currentFilters.status = 'pending';
+      } else if (activeTab === 'approved') {
+        currentFilters.status = 'approved';
+      } else if (activeTab === 'rejected') {
+        currentFilters.status = 'rejected';
+      }
+
+      // Filter leave requests based on current tab
+      let filteredRequests = leaveRequests;
+      if (activeTab !== 'requests' && activeTab !== 'dashboard') {
+        filteredRequests = leaveRequests.filter(leave => leave.status === activeTab);
+      }
+
+      // Check if there are any leave requests to export
+      if (filteredRequests.length === 0) {
+        showError('❌ No leave requests found to export');
+        return;
+      }
+
+      const fileName = await pdfExportService.exportLeaveReportToPDF(filteredRequests, currentFilters, { includeStats: true });
+      showSuccess(`✅ PDF report downloaded successfully as ${fileName}!`);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      showError('❌ Failed to export PDF report. Please try again.');
     }
   };
 
@@ -649,7 +684,8 @@ const UltraBeautifulLeaveManagement = () => {
             {[
               { icon: UserCheck, label: 'Review Pending', count: leaveRequests.filter(l => l.status === 'pending').length, color: 'from-amber-500 to-orange-600', description: 'Needs approval', onClick: handleReviewPending },
               { icon: Calendar, label: 'Today\'s Leaves', count: leaveRequests.filter(l => l.status === 'approved' && new Date(l.startDate) <= new Date() && new Date(l.endDate) >= new Date()).length, color: 'from-blue-500 to-indigo-600', description: 'Staff on leave', onClick: handleTodaysLeaves },
-              { icon: Download, label: 'Export Report', count: null, color: 'from-green-500 to-emerald-600', description: 'Download data', onClick: handleExportReport },
+              { icon: Download, label: 'Export Excel', count: null, color: 'from-green-500 to-emerald-600', description: 'Download CSV', onClick: handleExportReport },
+              { icon: FileText, label: 'Export PDF', count: null, color: 'from-blue-500 to-indigo-600', description: 'Download PDF', onClick: handleExportPDF },
               { icon: Settings, label: 'Manage Policies', count: null, color: 'from-purple-500 to-pink-600', description: 'Configure system', onClick: handleManagePolicies }
             ].map((action, index) => {
               const Icon = action.icon;

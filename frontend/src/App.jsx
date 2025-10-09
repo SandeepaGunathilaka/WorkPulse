@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import EmployeePortal from './pages/employee/EmployeePortal';
 import HRPortal from './pages/hr/HRPortal';
 import AdminPortal from './pages/admin/AdminPortal';
+import ContactHR from './pages/ContactHR';
 
 // Protected Route Component
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -49,6 +50,9 @@ function App() {
                   <AdminPortal />
                 </ProtectedRoute>
               } />
+              
+              {/* Contact HR Form */}
+                <Route path="/contact-hr" element={<ContactHR />} />
 
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

@@ -2,19 +2,17 @@ const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const Schedule = require('../models/Schedule');
 
-// @desc    Clock in for work
-// @route   POST /api/attendance/clock-in
-// @access  Employee
+// ========================
+// CLOCK IN
+// ========================
 const clockIn = async (req, res) => {
   try {
     const { location, method = 'web' } = req.body;
     const userId = req.user._id;
 
-    // Get today's date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Check if already clocked in today
     const existingAttendance = await Attendance.findOne({
       user: userId,
       date: today
@@ -27,7 +25,6 @@ const clockIn = async (req, res) => {
       });
     }
 
-    // Get user's schedule for today
     const todaySchedule = await Schedule.findOne({
       employee: userId,
       date: today,
@@ -48,16 +45,14 @@ const clockIn = async (req, res) => {
 
     let attendance;
     if (existingAttendance) {
-      // Update existing record
       attendance = await Attendance.findByIdAndUpdate(
         existingAttendance._id,
         clockInData,
         { new: true, runValidators: true }
-      ).populate('user', 'firstName lastName employeeId');
+      ).populate('user', 'firstName lastName employeeId department');
     } else {
-      // Create new record
       attendance = await Attendance.create(clockInData);
-      attendance = await attendance.populate('user', 'firstName lastName employeeId');
+      attendance = await attendance.populate('user', 'firstName lastName employeeId department');
     }
 
     res.status(200).json({
@@ -67,47 +62,44 @@ const clockIn = async (req, res) => {
     });
   } catch (error) {
     console.error('Clock in error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server Error', 
+      error: error.message 
     });
   }
 };
 
-// @desc    Clock out from work
-// @route   POST /api/attendance/clock-out
-// @access  Employee
+// ========================
+// CLOCK OUT
+// ========================
 const clockOut = async (req, res) => {
   try {
     const { location, method = 'web' } = req.body;
     const userId = req.user._id;
 
-    // Get today's date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Find today's attendance record
     const attendance = await Attendance.findOne({
       user: userId,
       date: today
     });
 
     if (!attendance || !attendance.checkIn?.time) {
-      return res.status(400).json({
-        success: false,
-        message: 'You must clock in first'
+      return res.status(400).json({ 
+        success: false, 
+        message: 'You must clock in first' 
       });
     }
 
     if (attendance.checkOut?.time) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already clocked out today'
+      return res.status(400).json({ 
+        success: false, 
+        message: 'You have already clocked out today' 
       });
     }
 
-    // Update with clock out data
     attendance.checkOut = {
       time: new Date(),
       location: location || {},
@@ -115,7 +107,7 @@ const clockOut = async (req, res) => {
     };
 
     await attendance.save();
-    await attendance.populate('user', 'firstName lastName employeeId');
+    await attendance.populate('user', 'firstName lastName employeeId department');
 
     res.status(200).json({
       success: true,
@@ -124,27 +116,25 @@ const clockOut = async (req, res) => {
     });
   } catch (error) {
     console.error('Clock out error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server Error', 
+      error: error.message 
     });
   }
 };
 
-// @desc    Start break
-// @route   POST /api/attendance/break-start
-// @access  Employee
+// ========================
+// START BREAK
+// ========================
 const startBreak = async (req, res) => {
   try {
     const { type = 'other' } = req.body;
     const userId = req.user._id;
 
-    // Get today's date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Find today's attendance record
     const attendance = await Attendance.findOne({
       user: userId,
       date: today
@@ -157,7 +147,6 @@ const startBreak = async (req, res) => {
       });
     }
 
-    // Check if already on break
     const ongoingBreak = attendance.breaks.find(b => b.startTime && !b.endTime);
     if (ongoingBreak) {
       return res.status(400).json({
@@ -166,7 +155,6 @@ const startBreak = async (req, res) => {
       });
     }
 
-    // Add new break
     attendance.breaks.push({
       startTime: new Date(),
       type
@@ -189,18 +177,16 @@ const startBreak = async (req, res) => {
   }
 };
 
-// @desc    End break
-// @route   POST /api/attendance/break-end
-// @access  Employee
+// ========================
+// END BREAK
+// ========================
 const endBreak = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // Get today's date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Find today's attendance record
     const attendance = await Attendance.findOne({
       user: userId,
       date: today
@@ -213,7 +199,6 @@ const endBreak = async (req, res) => {
       });
     }
 
-    // Find ongoing break
     const ongoingBreak = attendance.breaks.find(b => b.startTime && !b.endTime);
     if (!ongoingBreak) {
       return res.status(400).json({
@@ -222,7 +207,6 @@ const endBreak = async (req, res) => {
       });
     }
 
-    // End the break
     ongoingBreak.endTime = new Date();
     const breakDuration = (ongoingBreak.endTime - ongoingBreak.startTime) / (1000 * 60);
     ongoingBreak.duration = Math.round(breakDuration);
@@ -244,34 +228,37 @@ const endBreak = async (req, res) => {
   }
 };
 
-// @desc    Get my attendance records
-// @route   GET /api/attendance/my-records
-// @access  Employee
+// ========================
+// GET MY ATTENDANCE (Employee)
+// ========================
 const getMyAttendance = async (req, res) => {
   try {
+    console.log('🔍 getMyAttendance called with:', {
+      query: req.query,
+      userId: req.user?._id,
+      userRole: req.user?.role
+    });
+    
     const { page = 1, limit = 10, startDate, endDate, status } = req.query;
     const userId = req.user._id;
 
     const filter = { user: userId };
-
-    // Date range filter
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       if (endDate) filter.date.$lte = new Date(endDate);
     }
-
-    // Status filter
     if (status) filter.status = status;
 
     const attendance = await Attendance.find(filter)
-      .populate('user', 'firstName lastName employeeId')
+      .populate('user', 'firstName lastName employeeId department')
       .populate('shift')
       .sort({ date: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await Attendance.countDocuments(filter);
+    console.log('📊 Found attendance records:', attendance.length, 'Total:', total);
 
     // Calculate summary statistics
     const summary = await Attendance.aggregate([
@@ -292,9 +279,20 @@ const getMyAttendance = async (req, res) => {
       }
     ]);
 
-    res.json({
+    const responseData = {
       success: true,
-      data: attendance,
+      data: attendance.map(record => ({
+        _id: record._id,
+        date: record.date,
+        checkIn: record.checkIn,
+        checkOut: record.checkOut,
+        workHours: record.workHours,
+        overtime: record.overtime,
+        status: record.status,
+        breaks: record.breaks,
+        user: record.user,
+        shift: record.shift
+      })),
       summary: summary[0] || {
         totalDays: 0,
         totalHours: 0,
@@ -307,20 +305,29 @@ const getMyAttendance = async (req, res) => {
         pages: Math.ceil(total / limit),
         total
       }
+    };
+
+    console.log('📤 Sending response:', {
+      success: responseData.success,
+      dataCount: responseData.data.length,
+      summary: responseData.summary,
+      pagination: responseData.pagination
     });
+
+    res.json(responseData);
   } catch (error) {
     console.error('Get attendance error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server Error', 
+      error: error.message 
     });
   }
 };
 
-// @desc    Get attendance records for admin/HR
-// @route   GET /api/attendance
-// @access  Admin/HR
+// ========================
+// GET ALL ATTENDANCE (Admin/HR)
+// ========================
 const getAllAttendance = async (req, res) => {
   try {
     const {
@@ -335,18 +342,13 @@ const getAllAttendance = async (req, res) => {
     } = req.query;
 
     const filter = {};
-
-    // Date range filter
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       if (endDate) filter.date.$lte = new Date(endDate);
     }
-
-    // Status filter
     if (status) filter.status = status;
 
-    // Search and employee filters
     let userFilter = {};
     if (department) userFilter.department = department;
     if (employeeId) userFilter.employeeId = { $regex: employeeId, $options: 'i' };
@@ -358,7 +360,6 @@ const getAllAttendance = async (req, res) => {
       ];
     }
 
-    // If user filters exist, get matching user IDs
     if (Object.keys(userFilter).length > 0) {
       const users = await User.find(userFilter).select('_id');
       filter.user = { $in: users.map(u => u._id) };
@@ -374,9 +375,23 @@ const getAllAttendance = async (req, res) => {
 
     const total = await Attendance.countDocuments(filter);
 
+    const formattedData = attendance.map(record => ({
+      id: record._id,
+      name: `${record.user?.firstName || ''} ${record.user?.lastName || ''}`,
+      employeeId: record.user?.employeeId || 'N/A',
+      department: record.user?.department || 'N/A',
+      clockIn: record.checkIn?.time ? new Date(record.checkIn.time).toLocaleTimeString() : '-',
+      clockOut: record.checkOut?.time ? new Date(record.checkOut.time).toLocaleTimeString() : '-',
+      workingHours: `${record.workHours?.toFixed(2)}h`,
+      overtime: `${record.overtime?.toFixed(2)}h`,
+      status: record.status,
+      date: record.date,
+      shift: record.shift ? 'day' : 'day' // Default to day shift, can be enhanced later
+    }));
+
     res.json({
       success: true,
-      data: attendance,
+      data: formattedData,
       pagination: {
         current: page,
         pages: Math.ceil(total / limit),
@@ -385,31 +400,29 @@ const getAllAttendance = async (req, res) => {
     });
   } catch (error) {
     console.error('Get all attendance error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server Error', 
+      error: error.message 
     });
   }
 };
 
-// @desc    Get attendance statistics
-// @route   GET /api/attendance/stats
-// @access  Admin/HR
+// ========================
+// GET ATTENDANCE STATISTICS (Admin/HR)
+// ========================
 const getAttendanceStats = async (req, res) => {
   try {
     const { startDate, endDate, department } = req.query;
 
     const filter = {};
 
-    // Date range filter
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       if (endDate) filter.date.$lte = new Date(endDate);
     }
 
-    // Department filter through user lookup
     let userFilter = {};
     if (department) userFilter.department = department;
 
@@ -449,7 +462,6 @@ const getAttendanceStats = async (req, res) => {
       }
     ]);
 
-    // Department-wise statistics
     const departmentStats = await Attendance.aggregate([
       { $match: filter },
       {
@@ -498,9 +510,9 @@ const getAttendanceStats = async (req, res) => {
   }
 };
 
-// @desc    Get my attendance statistics
-// @route   GET /api/attendance/my-stats
-// @access  Employee
+// ========================
+// GET MY ATTENDANCE STATISTICS (Employee)
+// ========================
 const getMyAttendanceStats = async (req, res) => {
   try {
     const { startDate, endDate, type = 'monthly' } = req.query;
@@ -508,13 +520,11 @@ const getMyAttendanceStats = async (req, res) => {
 
     const filter = { user: userId };
 
-    // Date range filter
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       if (endDate) filter.date.$lte = new Date(endDate);
     } else {
-      // Default to current month if no dates provided
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -552,7 +562,6 @@ const getMyAttendanceStats = async (req, res) => {
       }
     ]);
 
-    // Daily performance for the period
     const dailyStats = await Attendance.aggregate([
       { $match: filter },
       {
@@ -568,7 +577,6 @@ const getMyAttendanceStats = async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Punctuality analysis
     const punctualityStats = await Attendance.aggregate([
       { $match: filter },
       {
@@ -611,14 +619,13 @@ const getMyAttendanceStats = async (req, res) => {
   }
 };
 
-// @desc    Get today's attendance status
-// @route   GET /api/attendance/today
-// @access  Employee
+// ========================
+// GET TODAY'S ATTENDANCE
+// ========================
 const getTodayAttendance = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // Get today's date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -635,7 +642,6 @@ const getTodayAttendance = async (req, res) => {
       });
     }
 
-    // Check if currently on break
     const ongoingBreak = attendance.breaks.find(b => b.startTime && !b.endTime);
 
     res.json({

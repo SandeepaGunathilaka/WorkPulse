@@ -2,39 +2,66 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const pdfExportService = {
-  exportEmployeesToPDF: (employees, filters = {}, options = { includeStats: true, includeDetails: true }) => {
-    const doc = new jsPDF();
+  exportEmployeesToPDF: async (employees, filters = {}, options = { includeStats: true, includeDetails: true }) => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 40;
 
-    // Set up document properties
-    doc.setProperties({
-      title: 'WorkPulse Employee Report',
-      subject: 'Employee Management Report',
-      author: 'WorkPulse Hospital Management System',
-      creator: 'WorkPulse'
-    });
+    // Load logo from public folder
+    const loadImageAsDataURL = (src) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    };
 
-    // Header
-    const pageWidth = doc.internal.pageSize.width;
-    const logoY = 20;
+    // Format currency
+    const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString()}`;
 
-    // Title Section
-    doc.setFontSize(24);
-    doc.setTextColor(30, 58, 138); // Blue color
-    doc.text('WorkPulse', pageWidth / 2, logoY, { align: 'center' });
+    // === PROFESSIONAL HEADER ===
+    const logoDataUrl = await loadImageAsDataURL('/Logo.png');
+    if (logoDataUrl) {
+      const logoWidth = 130;
+      const logoHeight = 55;
+      doc.addImage(logoDataUrl, 'PNG', 30, yPos - 10, logoWidth, logoHeight);
+    }
 
-    doc.setFontSize(16);
-    doc.setTextColor(75, 85, 99); // Gray color
-    doc.text('Hospital Employee Management System', pageWidth / 2, logoY + 8, { align: 'center' });
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('Colombo General Hospital', pageWidth - 30, yPos + 10, { align: 'right' });
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('123 Hospital Street, Colombo 07', pageWidth - 30, yPos + 28, { align: 'right' });
+    doc.text('Tel: +94 11 123 4567 | Email: info@cgh.lk', pageWidth - 30, yPos + 44, { align: 'right' });
+    yPos += 75;
+
+    // Accent divider
+    doc.setDrawColor(59, 130, 246);
+    doc.setFillColor(59, 130, 246);
+    doc.rect(30, yPos, pageWidth - 60, 3, 'F');
+    yPos += 25;
 
     // Report Title
     doc.setFontSize(20);
-    doc.setTextColor(17, 24, 39); // Dark gray
-    doc.text('Employee Report', pageWidth / 2, logoY + 20, { align: 'center' });
-
-    // Divider line
-    doc.setDrawColor(209, 213, 219);
-    doc.setLineWidth(0.5);
-    doc.line(20, logoY + 25, pageWidth - 20, logoY + 25);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(17, 24, 39);
+    doc.text('Employee Management Report', 30, yPos);
+    yPos += 30;
 
     // Report Details
     const currentDate = new Date().toLocaleDateString('en-US', {
@@ -46,299 +73,630 @@ const pdfExportService = {
     });
 
     doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
     doc.setTextColor(107, 114, 128);
-    doc.text(`Generated on: ${currentDate}`, 20, logoY + 35);
-    doc.text(`Total Employees: ${employees.length}`, pageWidth - 20, logoY + 35, { align: 'right' });
+    doc.text(`Generated on: ${currentDate}`, 30, yPos);
+    doc.text(`Total Employees: ${employees.length}`, pageWidth - 30, yPos, { align: 'right' });
+    yPos += 20;
 
     // Filter Information
-    let filterY = logoY + 45;
     if (Object.keys(filters).length > 0) {
       doc.setFontSize(12);
-      doc.setTextColor(75, 85, 99);
-      doc.text('Applied Filters:', 20, filterY);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('Applied Filters:', 30, yPos);
+      yPos += 15;
 
       doc.setFontSize(10);
-      filterY += 6;
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(75, 85, 99);
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          const filterLabel = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+          doc.text(`${filterLabel}: ${value}`, 30, yPos);
+          yPos += 12;
+        }
+      });
+      yPos += 10;
+    }
 
-      if (filters.department) {
-        doc.text(`• Department: ${filters.department}`, 25, filterY);
-        filterY += 5;
-      }
-      if (filters.role) {
-        doc.text(`• Role: ${filters.role}`, 25, filterY);
-        filterY += 5;
-      }
+    // Statistics Section
+    if (options.includeStats) {
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('Summary Statistics', 30, yPos);
+      yPos += 20;
+
+      // Calculate statistics
+      const activeEmployees = employees.filter(emp => emp.employmentStatus === 'active').length;
+      const inactiveEmployees = employees.filter(emp => emp.employmentStatus === 'inactive').length;
+      const departments = [...new Set(employees.map(emp => emp.department))].length;
+
+      // Create statistics table
+      const statsData = [
+        ['Total Employees', employees.length.toString()],
+        ['Active Employees', activeEmployees.toString()],
+        ['Inactive Employees', inactiveEmployees.toString()],
+        ['Departments', departments.toString()]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Metric', 'Count']],
+        body: statsData,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [59, 130, 246],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          textColor: [17, 24, 39]
+        },
+        margin: { left: 30, right: 30 },
+        styles: { fontSize: 10 }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 20;
+    }
+
+    // Employee Table
+    if (options.includeDetails && employees.length > 0) {
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('Employee Details', 30, yPos);
+      yPos += 20;
+
+      // Prepare table data
+      const tableData = employees.map(employee => [
+        employee.employeeId || 'N/A',
+        `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'N/A',
+        employee.email || 'N/A',
+        employee.department || 'N/A',
+        employee.designation || 'N/A',
+        employee.role || 'N/A',
+        employee.employmentStatus || 'N/A',
+        employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['ID', 'Name', 'Email', 'Department', 'Designation', 'Role', 'Status', 'Joining Date']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [59, 130, 246],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          textColor: [17, 24, 39],
+          fontSize: 8
+        },
+        columnStyles: {
+          0: { cellWidth: 60 }, // ID
+          1: { cellWidth: 80 }, // Name
+          2: { cellWidth: 100 }, // Email
+          3: { cellWidth: 70 }, // Department
+          4: { cellWidth: 80 }, // Designation
+          5: { cellWidth: 50 }, // Role
+          6: { cellWidth: 50 }, // Status
+          7: { cellWidth: 60 }  // Joining Date
+        },
+        margin: { left: 30, right: 30 },
+        didDrawPage: function (data) {
+          // Footer
+          const pageCount = doc.internal.getNumberOfPages();
+          const pageNumber = doc.internal.getCurrentPageInfo().pageNumber;
+
+          doc.setFontSize(8);
+          doc.setTextColor(107, 114, 128);
+
+          // Footer text
+          doc.text(
+            'Colombo General Hospital - Employee Management System - Confidential',
+            pageWidth / 2,
+            pageHeight - 20,
+            { align: 'center' }
+          );
+
+          // Page number
+          doc.text(
+            `Page ${pageNumber} of ${pageCount}`,
+            pageWidth - 30,
+            pageHeight - 20,
+            { align: 'right' }
+          );
+        }
+      });
+    }
+
+    // Save the PDF
+    const fileName = `CGH_Employee_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+
+    return fileName;
+  },
+
+  exportEmployeeDetailsPDF: async (employee) => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 40;
+  
+    // Load logo from public folder
+    const loadImageAsDataURL = (src) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    };
+  
+    const logoDataUrl = await loadImageAsDataURL('/Logo.png');
+    if (logoDataUrl) {
+      const logoWidth = 130;
+      const logoHeight = 55;
+      doc.addImage(logoDataUrl, 'PNG', 30, yPos - 10, logoWidth, logoHeight);
+    }
+  
+    // Header text
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('Colombo General Hospital', pageWidth - 30, yPos + 10, { align: 'right' });
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('123 Hospital Street, Colombo 07', pageWidth - 30, yPos + 28, { align: 'right' });
+    doc.text('Tel: +94 11 123 4567 | Email: info@cgh.lk', pageWidth - 30, yPos + 44, { align: 'right' });
+    yPos += 75;
+  
+    // Accent divider
+    doc.setDrawColor(59, 130, 246);
+    doc.setFillColor(59, 130, 246);
+    doc.rect(30, yPos, pageWidth - 60, 3, 'F');
+    yPos += 25;
+  
+    // Report Title
+    doc.setFontSize(18);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Employee Details Report', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 25;
+  
+    // Basic Info Table
+    const basicInfoData = [
+      ['Employee Name', `${employee.firstName} ${employee.lastName}`],
+      ['Employee ID', employee.employeeId],
+      ['Email', employee.email],
+      ['Phone', employee.phoneNumber],
+      ['Date of Birth', employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : 'N/A'],
+      ['Gender', employee.gender || 'N/A']
+    ];
+  
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Field', 'Value']],
+      body: basicInfoData,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 4 },
+      margin: { left: 30, right: 30 }
+    });
+  
+    yPos = doc.lastAutoTable.finalY + 15;
+  
+    // Employment Info Table
+    const employmentData = [
+      ['Department', employee.department || 'N/A'],
+      ['Designation', employee.designation || 'N/A'],
+      ['Role', employee.role || 'N/A'],
+      ['Employment Status', employee.employmentStatus || 'N/A'],
+      ['Joining Date', employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A']
+    ];
+  
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Field', 'Value']],
+      body: employmentData,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 4 },
+      margin: { left: 30, right: 30 }
+    });
+  
+    yPos = doc.lastAutoTable.finalY + 15;
+  
+    // Address Info Table (if available)
+    if (employee.address) {
+      const addressData = [
+        ['Street', employee.address.street || 'N/A'],
+        ['City', employee.address.city || 'N/A'],
+        ['State', employee.address.state || 'N/A'],
+        ['Zip Code', employee.address.zipCode || 'N/A'],
+        ['Country', employee.address.country || 'N/A']
+      ];
+  
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Field', 'Value']],
+        body: addressData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 4 },
+        margin: { left: 30, right: 30 }
+      });
+  
+      yPos = doc.lastAutoTable.finalY + 15;
+    }
+  
+    // Emergency Contact Table (if available)
+    if (employee.emergencyContact) {
+      const emergencyData = [
+        ['Name', employee.emergencyContact.name || 'N/A'],
+        ['Relationship', employee.emergencyContact.relationship || 'N/A'],
+        ['Phone', employee.emergencyContact.phoneNumber || 'N/A']
+      ];
+  
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Field', 'Value']],
+        body: emergencyData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 4 },
+        margin: { left: 30, right: 30 }
+      });
+  
+      yPos = doc.lastAutoTable.finalY + 15;
+    }
+  
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(107, 114, 128);
+    doc.text(
+      `Generated on ${new Date().toLocaleDateString()} - WorkPulse Hospital Management System`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  
+    const fileName = `Employee_${employee.employeeId}_Details_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    return fileName;
+  },
+
+  exportLeaveReportToPDF: async (leaveRequests, filters = {}, options = { includeStats: true }) => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 40;
+
+    // Load logo from public folder
+    const loadImageAsDataURL = (src) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    };
+
+    // Format currency
+    const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString()}`;
+
+    // === PROFESSIONAL HEADER ===
+    const logoDataUrl = await loadImageAsDataURL('/Logo.png');
+    if (logoDataUrl) {
+      const logoWidth = 130;
+      const logoHeight = 55;
+      doc.addImage(logoDataUrl, 'PNG', 30, yPos - 10, logoWidth, logoHeight);
+    }
+
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('Colombo General Hospital', pageWidth - 30, yPos + 10, { align: 'right' });
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('123 Hospital Street, Colombo 07', pageWidth - 30, yPos + 28, { align: 'right' });
+    doc.text('Tel: +94 11 123 4567 | Email: info@cgh.lk', pageWidth - 30, yPos + 44, { align: 'right' });
+    yPos += 75;
+
+    // Accent divider
+    doc.setDrawColor(59, 130, 246);
+    doc.setFillColor(59, 130, 246);
+    doc.rect(30, yPos, pageWidth - 60, 3, 'F');
+    yPos += 25;
+
+    // Report Title
+    doc.setFontSize(20);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(17, 24, 39);
+    doc.text('Leave Management Report', 30, yPos);
+    yPos += 30;
+
+    // Report Details
+    const currentDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Generated on: ${currentDate}`, 30, yPos);
+    doc.text(`Total Leave Requests: ${leaveRequests.length}`, pageWidth - 30, yPos, { align: 'right' });
+    yPos += 20;
+
+    // Filter Information
+    if (Object.keys(filters).length > 0) {
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('Applied Filters:', 30, yPos);
+      yPos += 15;
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(75, 85, 99);
+
       if (filters.status) {
-        doc.text(`• Status: ${filters.status}`, 25, filterY);
-        filterY += 5;
+        doc.text(`• Status: ${filters.status}`, 30, yPos);
+        yPos += 12;
       }
-      if (filters.search) {
-        doc.text(`• Search: "${filters.search}"`, 25, filterY);
-        filterY += 5;
+      if (filters.type) {
+        doc.text(`• Leave Type: ${filters.type}`, 30, yPos);
+        yPos += 12;
+      }
+      if (filters.department) {
+        doc.text(`• Department: ${filters.department}`, 30, yPos);
+        yPos += 12;
+      }
+      if (filters.dateRange) {
+        doc.text(`• Date Range: ${filters.dateRange}`, 30, yPos);
+        yPos += 12;
       }
 
-      filterY += 5;
+      yPos += 10;
     }
 
     // Statistics Section (only if enabled)
     if (options.includeStats) {
       const stats = {
-        total: employees.length,
-        active: employees.filter(emp => emp.employmentStatus === 'active').length,
-        inactive: employees.filter(emp => emp.employmentStatus === 'inactive').length,
-        onLeave: employees.filter(emp => emp.employmentStatus === 'on-leave').length,
-        byRole: {}
+        total: leaveRequests.length,
+        pending: leaveRequests.filter(leave => leave.status === 'pending').length,
+        approved: leaveRequests.filter(leave => leave.status === 'approved').length,
+        rejected: leaveRequests.filter(leave => leave.status === 'rejected').length,
+        byType: {}
       };
 
-      // Count by role
-      employees.forEach(emp => {
-        stats.byRole[emp.role] = (stats.byRole[emp.role] || 0) + 1;
+      // Count by leave type
+      leaveRequests.forEach(leave => {
+        stats.byType[leave.type] = (stats.byType[leave.type] || 0) + 1;
       });
 
-      // Statistics Box
-      doc.setFillColor(249, 250, 251);
-      doc.setDrawColor(229, 231, 235);
-      doc.roundedRect(20, filterY, pageWidth - 40, 35, 3, 3, 'FD');
+      // Statistics Section Title
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('Summary Statistics', 30, yPos);
+      yPos += 20;
 
-      doc.setFontSize(12);
-      doc.setTextColor(75, 85, 99);
-      doc.text('Employee Statistics', 25, filterY + 8);
+      // Statistics Table
+      const statsData = [
+        ['Total Requests', stats.total.toString()],
+        ['Pending', stats.pending.toString()],
+        ['Approved', stats.approved.toString()],
+        ['Rejected', stats.rejected.toString()]
+      ];
 
-      doc.setFontSize(10);
-      doc.setTextColor(107, 114, 128);
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Metric', 'Count']],
+        body: statsData,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [59, 130, 246],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 10
+        },
+        bodyStyles: {
+          textColor: [17, 24, 39],
+          fontSize: 9
+        },
+        columnStyles: {
+          0: { cellWidth: 120, fontStyle: 'bold' },
+          1: { cellWidth: 80, halign: 'center' }
+        },
+        margin: { left: 30, right: 30 },
+        styles: {
+          fontSize: 9,
+          cellPadding: 6
+        }
+      });
 
-      // First row of stats
-      const statsStartY = filterY + 15;
-      doc.text(`Active: ${stats.active}`, 25, statsStartY);
-      doc.text(`Inactive: ${stats.inactive}`, 70, statsStartY);
-      doc.text(`On Leave: ${stats.onLeave}`, 115, statsStartY);
+      yPos = doc.lastAutoTable.finalY + 20;
 
-      // Second row - by role
-      const rolesText = Object.entries(stats.byRole)
-        .map(([role, count]) => `${role}: ${count}`)
-        .join(' | ');
-      doc.text(`By Role: ${rolesText}`, 25, statsStartY + 7);
+      // Leave Type Breakdown
+      if (Object.keys(stats.byType).length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(17, 24, 39);
+        doc.text('Leave Type Breakdown', 30, yPos);
+        yPos += 20;
 
-      filterY += 45;
-    } else {
-      filterY += 10;
+        const typeData = Object.entries(stats.byType).map(([type, count]) => [
+          type.charAt(0).toUpperCase() + type.slice(1),
+          count.toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Leave Type', 'Count']],
+          body: typeData,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [59, 130, 246],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 10
+          },
+          bodyStyles: {
+            textColor: [17, 24, 39],
+            fontSize: 9
+          },
+          columnStyles: {
+            0: { cellWidth: 120, fontStyle: 'bold' },
+            1: { cellWidth: 80, halign: 'center' }
+          },
+          margin: { left: 30, right: 30 },
+          styles: {
+            fontSize: 9,
+            cellPadding: 6
+          }
+        });
+
+        yPos = doc.lastAutoTable.finalY + 20;
+      }
     }
 
-    // Prepare table data
-    const tableColumns = [
-      { header: 'ID', dataKey: 'employeeId' },
-      { header: 'Name', dataKey: 'name' },
-      { header: 'Email', dataKey: 'email' },
-      { header: 'Department', dataKey: 'department' },
-      { header: 'Role', dataKey: 'role' },
-      { header: 'Status', dataKey: 'status' },
-      { header: 'Joining Date', dataKey: 'joiningDate' }
-    ];
+    // Leave Requests Table
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(17, 24, 39);
+    doc.text('Leave Requests Details', 30, yPos);
+    yPos += 20;
 
-    const tableData = employees.map(employee => ({
-      employeeId: employee.employeeId || 'N/A',
-      name: `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
-      email: employee.email || 'N/A',
-      department: employee.department || 'N/A',
-      role: employee.role ? employee.role.charAt(0).toUpperCase() + employee.role.slice(1) : 'N/A',
-      status: employee.employmentStatus ?
-        employee.employmentStatus.charAt(0).toUpperCase() + employee.employmentStatus.slice(1) : 'N/A',
-      joiningDate: employee.joiningDate ?
-        new Date(employee.joiningDate).toLocaleDateString('en-US', {
+    // Prepare table data
+    const tableData = leaveRequests.map(leave => [
+      `${leave.employee?.firstName || ''} ${leave.employee?.lastName || ''}`.trim() || 'N/A',
+      leave.employee?.department || leave.department || 'General',
+      leave.type ? leave.type.charAt(0).toUpperCase() + leave.type.slice(1) : 'N/A',
+      leave.startDate ? new Date(leave.startDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) : 'N/A',
+      leave.endDate ? new Date(leave.endDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) : 'N/A',
+      leave.totalDays || 0,
+      leave.status ? leave.status.charAt(0).toUpperCase() + leave.status.slice(1) : 'N/A',
+      leave.appliedDate ? new Date(leave.appliedDate).toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'short',
           day: 'numeric'
-        }) : 'N/A'
-    }));
+      }) : 'N/A',
+      leave.reason || 'No reason provided'
+    ]);
 
     // Generate table
     autoTable(doc, {
-      columns: tableColumns,
+      startY: yPos,
+      head: [['Employee Name', 'Department', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Applied Date', 'Reason']],
       body: tableData,
-      startY: filterY,
       theme: 'grid',
-      styles: {
-        fontSize: 9,
-        cellPadding: 3,
-        overflow: 'linebreak'
-      },
       headStyles: {
-        fillColor: [30, 58, 138], // Blue header
+        fillColor: [59, 130, 246],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        fontSize: 10
+        fontSize: 9
       },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252] // Light gray for alternate rows
+      bodyStyles: {
+        textColor: [17, 24, 39],
+        fontSize: 8
       },
       columnStyles: {
-        employeeId: { cellWidth: 25 },
-        name: { cellWidth: 35 },
-        email: { cellWidth: 40 },
-        department: { cellWidth: 28 },
-        role: { cellWidth: 18 },
-        status: { cellWidth: 18 },
-        joiningDate: { cellWidth: 30 }
+        0: { cellWidth: 80 }, // Employee Name
+        1: { cellWidth: 60 }, // Department
+        2: { cellWidth: 50 }, // Leave Type
+        3: { cellWidth: 60 }, // Start Date
+        4: { cellWidth: 60 }, // End Date
+        5: { cellWidth: 30 }, // Days
+        6: { cellWidth: 50 }, // Status
+        7: { cellWidth: 60 }, // Applied Date
+        8: { cellWidth: 80 }  // Reason
       },
-      margin: { left: 20, right: 20 },
+      margin: { left: 30, right: 30 },
+      styles: {
+        fontSize: 8,
+        cellPadding: 4,
+        overflow: 'linebreak'
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
       didDrawPage: function (data) {
-        // Footer
+        // Professional Footer
         const pageCount = doc.internal.getNumberOfPages();
         const pageNumber = doc.internal.getCurrentPageInfo().pageNumber;
+
+        // Footer divider
+        doc.setDrawColor(59, 130, 246);
+        doc.setFillColor(59, 130, 246);
+        doc.rect(30, pageHeight - 40, pageWidth - 60, 1, 'F');
 
         doc.setFontSize(8);
         doc.setTextColor(107, 114, 128);
 
-        // Footer text
+        // Confidentiality notice
         doc.text(
-          'WorkPulse Hospital Employee Management System - Confidential',
+          'This document contains confidential information. Unauthorized distribution is prohibited.',
           pageWidth / 2,
-          doc.internal.pageSize.height - 10,
+          pageHeight - 25,
           { align: 'center' }
         );
 
         // Page number
         doc.text(
           `Page ${pageNumber} of ${pageCount}`,
-          pageWidth - 20,
-          doc.internal.pageSize.height - 10,
+          pageWidth - 30,
+          pageHeight - 10,
           { align: 'right' }
+        );
+
+        // Generation timestamp
+        doc.text(
+          `Generated: ${new Date().toLocaleString()}`,
+          30,
+          pageHeight - 10
         );
       }
     });
 
     // Save the PDF
-    const fileName = `WorkPulse_Employee_Report_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-
-    return fileName;
-  },
-
-  exportEmployeeDetailsPDF: (employee) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-
-    // Header
-    doc.setFontSize(24);
-    doc.setTextColor(30, 58, 138);
-    doc.text('WorkPulse', pageWidth / 2, 25, { align: 'center' });
-
-    doc.setFontSize(14);
-    doc.setTextColor(75, 85, 99);
-    doc.text('Employee Details Report', pageWidth / 2, 35, { align: 'center' });
-
-    // Divider
-    doc.setDrawColor(209, 213, 219);
-    doc.line(20, 40, pageWidth - 20, 40);
-
-    // Employee Info
-    let yPosition = 55;
-
-    // Employee name and ID
-    doc.setFontSize(18);
-    doc.setTextColor(17, 24, 39);
-    doc.text(`${employee.firstName} ${employee.lastName}`, 20, yPosition);
-
-    doc.setFontSize(12);
-    doc.setTextColor(107, 114, 128);
-    doc.text(`Employee ID: ${employee.employeeId}`, 20, yPosition + 8);
-
-    yPosition += 25;
-
-    // Personal Information
-    const sections = [
-      {
-        title: 'Personal Information',
-        fields: [
-          { label: 'Email', value: employee.email },
-          { label: 'Phone', value: employee.phoneNumber },
-          { label: 'Date of Birth', value: employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }) : 'N/A' },
-          { label: 'Gender', value: employee.gender }
-        ]
-      },
-      {
-        title: 'Employment Information',
-        fields: [
-          { label: 'Department', value: employee.department },
-          { label: 'Designation', value: employee.designation },
-          { label: 'Role', value: employee.role },
-          { label: 'Employment Status', value: employee.employmentStatus },
-          { label: 'Joining Date', value: employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }) : 'N/A' }
-        ]
-      }
-    ];
-
-    if (employee.address) {
-      sections.push({
-        title: 'Address Information',
-        fields: [
-          { label: 'Street', value: employee.address.street },
-          { label: 'City', value: employee.address.city },
-          { label: 'State', value: employee.address.state },
-          { label: 'Zip Code', value: employee.address.zipCode },
-          { label: 'Country', value: employee.address.country }
-        ]
-      });
-    }
-
-    if (employee.emergencyContact) {
-      sections.push({
-        title: 'Emergency Contact',
-        fields: [
-          { label: 'Name', value: employee.emergencyContact.name },
-          { label: 'Relationship', value: employee.emergencyContact.relationship },
-          { label: 'Phone', value: employee.emergencyContact.phoneNumber }
-        ]
-      });
-    }
-
-    // Render sections
-    sections.forEach(section => {
-      doc.setFontSize(14);
-      doc.setTextColor(30, 58, 138);
-      doc.text(section.title, 20, yPosition);
-      yPosition += 10;
-
-      doc.setFontSize(10);
-      doc.setTextColor(75, 85, 99);
-
-      section.fields.forEach(field => {
-        if (field.value) {
-          doc.text(`${field.label}:`, 25, yPosition);
-          doc.setTextColor(17, 24, 39);
-          doc.text(field.value, 70, yPosition);
-          doc.setTextColor(75, 85, 99);
-          yPosition += 6;
-        }
-      });
-
-      yPosition += 10;
-    });
-
-    // Footer
-    doc.setFontSize(8);
-    doc.setTextColor(107, 114, 128);
-    doc.text(
-      `Generated on ${new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })} - WorkPulse Hospital Management System`,
-      pageWidth / 2,
-      doc.internal.pageSize.height - 10,
-      { align: 'center' }
-    );
-
-    // Save
-    const fileName = `Employee_${employee.employeeId}_Details_${new Date().toISOString().split('T')[0]}.pdf`;
+    const fileName = `Leave_Report_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
 
     return fileName;

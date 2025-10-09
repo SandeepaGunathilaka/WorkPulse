@@ -170,7 +170,7 @@ const SalaryRecords = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'draft': return 'bg-yellow-100 text-yellow-800';
       case 'rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -229,7 +229,7 @@ const SalaryRecords = () => {
                 <div><strong>Year:</strong> {record.year}</div>
                 <div><strong>Status:</strong>
                   <span className={`ml-2 px-2 py-1 rounded-full text-xs ${getStatusColor(record.status)}`}>
-                    {record.status || 'pending'}
+                    {record.status || 'draft'}
                   </span>
                 </div>
                 <div><strong>Generated On:</strong> {new Date(record.createdAt).toLocaleDateString()}</div>
@@ -415,9 +415,9 @@ const SalaryRecords = () => {
             <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-4 rounded-xl text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-yellow-100 text-sm">Pending</p>
+                  <p className="text-yellow-100 text-sm">Draft</p>
                   <p className="text-2xl font-bold">
-                    {salaryRecords.filter(r => r.status === 'pending' || !r.status).length}
+                    {salaryRecords.filter(r => r.status === 'draft').length}
                   </p>
                 </div>
                 <Clock className="w-8 h-8 text-yellow-200" />
@@ -466,7 +466,7 @@ const SalaryRecords = () => {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white appearance-none cursor-pointer"
               >
                 <option value="all">All Status</option>
-                <option value="pending">Pending</option>
+                <option value="draft">Draft</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
               </select>
@@ -617,9 +617,9 @@ const SalaryRecords = () => {
                           <td className="px-6 py-5 whitespace-nowrap">
                             <span className={`inline-flex items-center px-3 py-1 text-xs font-bold rounded-full shadow-sm ${getStatusColor(record.status)}`}>
                               {record.status === 'approved' && <Check className="w-3 h-3 mr-1" />}
-                              {record.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                              {record.status === 'draft' && <Clock className="w-3 h-3 mr-1" />}
                               {record.status === 'rejected' && <X className="w-3 h-3 mr-1" />}
-                              {record.status || 'pending'}
+                              {record.status || 'draft'}
                             </span>
                           </td>
                           <td className="px-6 py-5 whitespace-nowrap">

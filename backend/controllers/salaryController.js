@@ -21,6 +21,14 @@ const calculateSalary = async (req, res) => {
       });
     }
 
+    // Block calculation for inactive or terminated employees
+    if (['inactive', 'terminated'].includes(employee.employmentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot calculate salary for ${employee.employmentStatus} employee`
+      });
+    }
+
     // Check if salary already exists for this month
     const existingSalary = await Salary.findOne({
       employee: employeeId,
@@ -185,6 +193,22 @@ const createSalary = async (req, res) => {
     };
 
     console.log('Creating salary with data:', salaryData);
+
+    // Validate employee and employment status before creating salary
+    const employee = await User.findById(salaryData.employee);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee not found'
+      });
+    }
+
+    if (['inactive', 'terminated'].includes(employee.employmentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot create salary for ${employee.employmentStatus} employee`
+      });
+    }
 
     const salary = await Salary.create(salaryData);
     await salary.populate('employee', 'firstName lastName employeeId');
